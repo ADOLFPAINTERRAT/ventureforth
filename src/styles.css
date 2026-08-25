@@ -1,8 +1,10 @@
 @import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
+@import "leaflet/dist/leaflet.css";
 
 @custom-variant dark (&:is(.dark *));
+
 
 /*
  * Design system definition.
@@ -141,4 +143,96 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
   }
+}
+
+/* ── Expedition game theme ───────────────────────────────── */
+:root {
+  --background: oklch(0.16 0.045 258);
+  --foreground: oklch(0.95 0.02 240);
+  --card: oklch(0.21 0.055 258 / 0.86);
+  --card-foreground: oklch(0.95 0.02 240);
+  --popover: oklch(0.21 0.055 258);
+  --popover-foreground: oklch(0.95 0.02 240);
+  --primary: oklch(0.62 0.19 258);
+  --primary-foreground: oklch(0.98 0.01 240);
+  --secondary: oklch(0.28 0.06 258);
+  --secondary-foreground: oklch(0.95 0.02 240);
+  --muted: oklch(0.26 0.05 258);
+  --muted-foreground: oklch(0.72 0.04 250);
+  --accent: oklch(0.78 0.16 190);
+  --accent-foreground: oklch(0.18 0.05 258);
+  --destructive: oklch(0.62 0.23 25);
+  --destructive-foreground: oklch(0.98 0.01 240);
+  --border: oklch(0.62 0.19 258 / 0.45);
+  --input: oklch(0.3 0.06 258);
+  --ring: oklch(0.62 0.19 258);
+  --radius: 0.35rem;
+  --font-game: "JetBrains Mono", ui-monospace, monospace;
+  --glow-primary: 0 0 0 1px oklch(0.62 0.19 258 / 0.6), 0 0 18px oklch(0.62 0.19 258 / 0.35);
+}
+
+@theme inline {
+  --font-mono: var(--font-game);
+  --font-sans: var(--font-game);
+}
+
+body {
+  font-family: var(--font-game);
+  letter-spacing: 0.02em;
+}
+
+@utility panel {
+  background: color-mix(in oklab, var(--card) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  box-shadow: var(--glow-primary);
+}
+
+@utility ctrl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.5rem;
+  width: 2.5rem;
+  border-radius: var(--radius);
+  background: color-mix(in oklab, var(--primary) 75%, black);
+  color: var(--primary-foreground);
+  border: 1px solid var(--border);
+  transition: all 0.15s ease;
+  &:hover {
+    background: var(--primary);
+    box-shadow: var(--glow-primary);
+  }
+  &:active {
+    transform: translateY(1px);
+  }
+}
+
+/* Leaflet game-map look */
+.leaflet-container {
+  background: oklch(0.14 0.04 258);
+  font-family: var(--font-game);
+  outline: none;
+}
+.leaflet-tile-pane {
+  filter: saturate(1.45) contrast(1.15) brightness(0.55) hue-rotate(-12deg);
+}
+.leaflet-control-attribution {
+  background: oklch(0.16 0.045 258 / 0.7) !important;
+  color: oklch(0.72 0.04 250) !important;
+  font-size: 9px !important;
+}
+.leaflet-control-attribution a {
+  color: oklch(0.78 0.16 190) !important;
+}
+
+.map-tint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 400;
+  background:
+    radial-gradient(circle at 50% 50%, oklch(0.2 0.08 258 / 0.15) 40%, oklch(0.12 0.05 258 / 0.6) 100%),
+    linear-gradient(oklch(0.3 0.14 258 / 0.35), oklch(0.3 0.14 258 / 0.35));
+  mix-blend-mode: multiply;
 }
