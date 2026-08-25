@@ -42,21 +42,34 @@ type Phase = "start" | "locating" | "active";
 function Index() {
   const [phase, setPhase] = useState<Phase>("start");
   const [player, setPlayer] = useState<LatLng | null>(null);
-  const [heading, setHeading] = useState<number | null>(null);
+  const [accuracy, setAccuracy] = useState<number | null>(null);
+  const [fixAge, setFixAge] = useState(0);
+  const { heading, source: headingSource, begin: startCompass, pushGps } = useHeading();
   const [destination, setDestination] = useState<LatLng | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showGrid, setShowGrid] = useState(true);
   const [follow, setFollow] = useState(true);
   const mapRef = useRef<L.Map | null>(null);
   const watchRef = useRef<number | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevRef = useRef<LatLng | null>(null);
+  const lastFixRef = useRef<number>(Date.now());
 
-  useEffect(
-    () => () => {
-      if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current);
-    },
-    [],
-  );
+  const stopTracking = useCallback(() => {
+    if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current);
+    watchRef.current = null;
+    if (pollRef.current !== null) clearInterval(pollRef.current);
+    pollRef.current = null;
+  }, []);
+
+  useEffect(() => () => stopTracking(), [stopTracking]);
+
+  // "seconds since last GPS fix" indicator
+  useEffect(() => {
+    if (phase !== "active") return;
+    const id = setInterval(() => setFixAge(Math.round((Date.now() - lastFixRef.current) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [phase]);
 
   const begin = useCallback(() => {
     if (!("geolocation" in navigator)) {
@@ -65,26 +78,46 @@ function Index() {
     }
     setError(null);
     setPhase("locating");
+    startCompass(); // must happen inside the tap gesture (iOS permission)
+
+    const onFix = (p: GeolocationPosition) => {
+      const next = { lat: p.coords.latitude, lng: p.coords.longitude };
+      lastFixRef.current = Date.now();
+      setAccuracy(p.coords.accuracy ?? null);
+      const moved = prevRef.current ? distanceMeters(prevRef.current, next) : 0;
+      if (p.coords.heading !== null && !Number.isNaN(p.coords.heading) && (p.coords.speed ?? 0) > 0.5) {
+        pushGps(p.coords.heading);
+      } else if (prevRef.current && moved > 3) {
+        pushGps(bearingDegrees(prevRef.current, next));
+      }
+      if (!prevRef.current || moved > 0.5) {
+        prevRef.current = next;
+        setPlayer(next);
+      }
+    };
+
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        prevRef.current = here;
+        lastFixRef.current = Date.now();
         setPlayer(here);
+        setAccuracy(pos.coords.accuracy ?? null);
         setDestination(rollDestination(here));
         setPhase("active");
-        watchRef.current = navigator.geolocation.watchPosition(
-          (p) => {
-            const next = { lat: p.coords.latitude, lng: p.coords.longitude };
-            if (p.coords.heading !== null && !Number.isNaN(p.coords.heading)) {
-              setHeading(p.coords.heading);
-            } else if (prevRef.current && distanceMeters(prevRef.current, next) > 4) {
-              setHeading(bearingDegrees(prevRef.current, next));
-            }
-            prevRef.current = next;
-            setPlayer(next);
-          },
-          () => {},
-          { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 },
-        );
+        watchRef.current = navigator.geolocation.watchPosition(onFix, () => {}, {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 30000,
+        });
+        // some browsers throttle watchPosition heavily — poll as a safety net
+        pollRef.current = setInterval(() => {
+          navigator.geolocation.getCurrentPosition(onFix, () => {}, {
+            enableHighAccuracy: true,
+            maximumAge: 0,
+            timeout: 15000,
+          });
+        }, 3000);
       },
       (err) => {
         setPhase("start");
@@ -94,19 +127,20 @@ function Index() {
             : "Could not get your position. Try again outdoors.",
         );
       },
-      { enableHighAccuracy: true, timeout: 20000 },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
     );
-  }, []);
+  }, [pushGps, startCompass]);
 
   const end = useCallback(() => {
-    if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current);
-    watchRef.current = null;
+    stopTracking();
     prevRef.current = null;
     setDestination(null);
     setPlayer(null);
-    setHeading(null);
+    setAccuracy(null);
     setPhase("start");
-  }, []);
+  }, [stopTracking]);
+
+
 
   if (phase !== "active" || !player || !destination) {
     return <StartScreen onBegin={begin} loading={phase === "locating"} error={error} />;
