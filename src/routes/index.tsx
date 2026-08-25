@@ -119,7 +119,7 @@ function Index() {
             maximumAge: 0,
             timeout: 15000,
           });
-        }, 3000);
+        }, 1000);
       },
       (err) => {
         setPhase("start");
