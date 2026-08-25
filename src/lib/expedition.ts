@@ -70,8 +70,8 @@ export const ARRIVAL_RADIUS = 40;
 export function sectorCode(p: LatLng) {
   const { x, z } = gameCoords(p);
   const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-  const l = letters[Math.abs(Math.floor(x / 64)) % letters.length] ?? "A";
-  const n = Math.abs(Math.floor(z / 64)) % 100;
+  const l = letters[Math.abs(Math.floor(x / 512)) % letters.length] ?? "A";
+  const n = Math.abs(Math.floor(z / 512)) % 100;
   return `${l}-${String(n).padStart(2, "0")}`;
 }
 
