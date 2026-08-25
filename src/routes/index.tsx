@@ -94,10 +94,8 @@ function Index() {
       } else if (prevRef.current && moved > 3) {
         pushGps(bearingDegrees(prevRef.current, next));
       }
-      if (!prevRef.current || moved > 0.5) {
-        prevRef.current = next;
-        setPlayer(next);
-      }
+      prevRef.current = next;
+      setPlayer(next);
     };
 
     navigator.geolocation.getCurrentPosition(
