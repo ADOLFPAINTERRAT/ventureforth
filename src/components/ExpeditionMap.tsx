@@ -13,22 +13,18 @@ type Props = {
   onMapReady: (map: L.Map) => void;
 };
 
-function playerIcon(heading: number | null) {
+function playerIcon() {
   return L.divIcon({
     className: "",
     iconSize: [56, 56],
     iconAnchor: [28, 28],
     html: `
       <div style="position:relative;width:56px;height:56px;display:grid;place-items:center;">
-        ${
-          heading === null
-            ? ""
-            : `<div style="position:absolute;inset:0;transform:rotate(${heading}deg);">
-                 <div style="position:absolute;left:50%;top:-2px;translate:-50% 0;width:0;height:0;
-                   border-left:7px solid transparent;border-right:7px solid transparent;
-                   border-bottom:12px solid oklch(0.72 0.19 258);"></div>
-               </div>`
-        }
+        <div class="player-arrow" style="position:absolute;inset:0;transition:transform .12s linear;opacity:0;">
+          <div style="position:absolute;left:50%;top:-2px;translate:-50% 0;width:0;height:0;
+            border-left:7px solid transparent;border-right:7px solid transparent;
+            border-bottom:12px solid oklch(0.72 0.19 258);"></div>
+        </div>
         <div style="width:26px;height:26px;border-radius:50%;background:oklch(0.62 0.19 258);
           border:3px solid oklch(0.96 0.02 240);
           box-shadow:0 0 0 6px oklch(0.62 0.19 258 / .25),0 0 22px oklch(0.62 0.19 258 / .8);"></div>
@@ -87,7 +83,7 @@ export default function ExpeditionMap({
     }).addTo(map);
 
     playerRef.current = L.marker([player.lat, player.lng], {
-      icon: playerIcon(heading),
+      icon: playerIcon(),
       zIndexOffset: 1000,
     }).addTo(map);
 
@@ -121,7 +117,7 @@ export default function ExpeditionMap({
     const map = mapRef.current;
     if (!map) return;
     const ll = L.latLng(player.lat, player.lng);
-    playerRef.current?.setLatLng(ll).setIcon(playerIcon(heading));
+    playerRef.current?.setLatLng(ll);
     if (destination) {
       const dll = L.latLng(destination.lat, destination.lng);
       if (!destRef.current) {
@@ -146,7 +142,19 @@ export default function ExpeditionMap({
       map.panTo(ll, { animate: true });
       setTimeout(() => (programmatic.current = false), 400);
     }
-  }, [player, heading, destination, follow, ready]);
+  }, [player, destination, follow, ready]);
+
+  // rotate the heading arrow without rebuilding the marker (keeps it snappy)
+  useEffect(() => {
+    const el = playerRef.current?.getElement()?.querySelector<HTMLElement>(".player-arrow");
+    if (!el) return;
+    if (heading === null) {
+      el.style.opacity = "0";
+      return;
+    }
+    el.style.opacity = "1";
+    el.style.transform = `rotate(${heading}deg)`;
+  }, [heading, player, ready]);
 
   return (
     <div className="absolute inset-0">
