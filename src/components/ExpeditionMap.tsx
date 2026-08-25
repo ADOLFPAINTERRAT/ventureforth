@@ -20,16 +20,17 @@ function playerIcon() {
     iconAnchor: [28, 28],
     html: `
       <div style="position:relative;width:56px;height:56px;display:grid;place-items:center;">
-        <div class="player-arrow" style="position:absolute;inset:0;transition:transform .12s linear;opacity:0;">
-          <div style="position:absolute;left:50%;top:-2px;translate:-50% 0;width:0;height:0;
-            border-left:7px solid transparent;border-right:7px solid transparent;
-            border-bottom:12px solid oklch(0.72 0.19 258);"></div>
+        <div class="player-arrow" style="position:absolute;inset:0;transition:transform .1s linear;opacity:0;">
+          <div style="position:absolute;left:50%;top:-1px;translate:-50% 0;width:0;height:0;
+            border-left:8px solid transparent;border-right:8px solid transparent;
+            border-bottom:14px solid oklch(0.86 0.15 78);
+            filter:drop-shadow(0 0 6px oklch(0.8 0.15 78 / .7));"></div>
         </div>
-        <div style="width:26px;height:26px;border-radius:50%;background:oklch(0.62 0.19 258);
-          border:3px solid oklch(0.96 0.02 240);
-          box-shadow:0 0 0 6px oklch(0.62 0.19 258 / .25),0 0 22px oklch(0.62 0.19 258 / .8);"></div>
-        <div style="position:absolute;bottom:-14px;font:600 10px/1 'JetBrains Mono',monospace;
-          letter-spacing:.18em;color:oklch(0.96 0.02 240);text-shadow:0 0 6px #000;">YOU</div>
+        <div style="position:absolute;width:44px;height:44px;border-radius:50%;
+          border:1px solid oklch(0.86 0.15 78 / .35);"></div>
+        <div style="width:18px;height:18px;border-radius:50%;background:oklch(0.96 0.02 90);
+          border:3px solid oklch(0.8 0.15 78);
+          box-shadow:0 0 0 5px oklch(0.8 0.15 78 / .16),0 0 18px oklch(0.8 0.15 78 / .55);"></div>
       </div>`,
   });
 }
@@ -40,15 +41,16 @@ const destIcon = L.divIcon({
   iconAnchor: [32, 32],
   html: `
     <div style="width:64px;height:64px;display:grid;place-items:center;">
-      <svg width="60" height="60" viewBox="0 0 60 60">
-        <g stroke="oklch(0.85 0.17 190)" stroke-width="7" stroke-linecap="round"
-           style="filter:drop-shadow(0 0 8px oklch(0.78 0.16 190));">
-          <line x1="13" y1="13" x2="47" y2="47"/>
-          <line x1="47" y1="13" x2="13" y2="47"/>
+      <svg width="58" height="58" viewBox="0 0 60 60">
+        <g stroke="oklch(0.7 0.2 35)" stroke-width="6" stroke-linecap="round"
+           style="filter:drop-shadow(0 0 7px oklch(0.65 0.2 35 / .8));">
+          <path d="M14 12 Q31 30 46 48" fill="none"/>
+          <path d="M47 13 Q29 31 13 46" fill="none"/>
         </g>
       </svg>
     </div>`,
 });
+
 
 export default function ExpeditionMap({
   player,
@@ -124,16 +126,18 @@ export default function ExpeditionMap({
         destRef.current = L.marker(dll, { icon: destIcon, interactive: false }).addTo(map);
         ringRef.current = L.circle(dll, {
           radius: ARRIVAL_RADIUS,
-          color: "oklch(0.85 0.17 190)",
+          color: "oklch(0.72 0.2 35)",
           weight: 1,
-          fillOpacity: 0.12,
+          fillColor: "oklch(0.72 0.2 35)",
+          fillOpacity: 0.1,
         }).addTo(map);
         lineRef.current = L.polyline([ll, dll], {
-          color: "oklch(0.78 0.16 190)",
+          color: "oklch(0.8 0.15 78)",
           weight: 1.5,
-          dashArray: "6 10",
-          opacity: 0.7,
+          dashArray: "2 9",
+          opacity: 0.55,
         }).addTo(map);
+
       }
       lineRef.current?.setLatLngs([ll, dll]);
     }
@@ -165,12 +169,13 @@ export default function ExpeditionMap({
           className="pointer-events-none absolute inset-0 z-[401]"
           style={{
             backgroundImage:
-              "linear-gradient(rgba(175,210,255,0.32) 1px, transparent 1px), linear-gradient(90deg, rgba(175,210,255,0.32) 1px, transparent 1px)",
+              "linear-gradient(rgba(235,205,150,0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(235,205,150,0.16) 1px, transparent 1px)",
             backgroundSize: `${grid.size}px ${grid.size}px`,
             backgroundPosition: `${grid.ox}px ${grid.oy}px`,
           }}
         />
       )}
+
       <div className="map-tint" aria-hidden />
     </div>
   );

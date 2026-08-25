@@ -64,3 +64,17 @@ export function formatDistance(m: number) {
 }
 
 export const ARRIVAL_RADIUS = 40;
+
+/** Human-readable sector code for the fictional grid, e.g. "K-14". */
+export function sectorCode(p: LatLng) {
+  const { x, z } = gameCoords(p);
+  const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const l = letters[Math.abs(Math.floor(x / 64)) % letters.length] ?? "A";
+  const n = Math.abs(Math.floor(z / 64)) % 100;
+  return `${l}-${String(n).padStart(2, "0")}`;
+}
+
+/** Rough walking time in minutes at ~4.8 km/h. */
+export function walkMinutes(meters: number) {
+  return Math.max(1, Math.round(meters / 80));
+}

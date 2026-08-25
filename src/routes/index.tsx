@@ -10,6 +10,9 @@ import {
   formatDistance,
   gameCoords,
   rollDestination,
+  sectorCode,
+  walkMinutes,
+
   type LatLng,
 } from "@/lib/expedition";
 import { useHeading } from "@/lib/use-heading";
@@ -169,22 +172,52 @@ function Index() {
         />
       </Suspense>
 
-      {/* top bar */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-[500] p-2 sm:p-3">
-        <div className="panel pointer-events-auto flex items-center justify-between gap-3 rounded px-3 py-2 text-[10px] sm:text-xs">
-          <span className="font-bold tracking-[0.2em] text-accent">EXPEDITION #001</span>
-          <span className="tracking-widest text-foreground">
-            X: {pc.x} <span className="text-muted-foreground">Z:</span> {pc.z}
+      {/* top strip */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-[500] p-3">
+        <div className="panel pointer-events-auto flex items-center justify-between gap-3 rounded-xl px-3 py-2">
+          <span className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+            Field log
           </span>
-          <span className="tracking-[0.2em] text-muted-foreground">
-            <span className={fixAge < 8 ? "text-accent" : "text-destructive"}>●</span> GPS{" "}
-            {accuracy !== null ? `±${Math.round(accuracy)}M` : "--"}
+          <span className="flex items-center gap-1.5 text-[10px] tracking-[0.18em] text-muted-foreground">
+            <span
+              className={
+                fixAge < 8
+                  ? "h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_8px_var(--accent)]"
+                  : "h-1.5 w-1.5 rounded-full bg-destructive"
+              }
+            />
+            GPS {accuracy !== null ? `±${Math.round(accuracy)} m` : "—"}
           </span>
         </div>
       </div>
 
-      {/* left controls */}
-      <div className="absolute left-2 top-1/2 z-[500] flex -translate-y-1/2 flex-col gap-2 sm:left-3">
+      {/* distance + compass, top centre */}
+      <div className="pointer-events-none absolute inset-x-0 top-[4.6rem] z-[500] flex flex-col items-center gap-2">
+        {arrived ? (
+          <div className="panel rounded-xl px-5 py-3 text-center">
+            <p className="text-base font-bold tracking-[0.2em] text-accent">YOU MADE IT</p>
+            <p className="mt-1 text-[10px] tracking-wider text-muted-foreground">
+              Have a look around before you head back.
+            </p>
+          </div>
+        ) : (
+          <div className="panel flex items-center gap-3 rounded-xl px-4 py-2.5">
+            <Compass
+              className="h-6 w-6 shrink-0 text-accent transition-transform duration-300"
+              style={{ transform: `rotate(${bearing}deg)` }}
+            />
+            <div className="leading-none">
+              <p className="coord-num text-lg">{formatDistance(dist)}</p>
+              <p className="mt-1 text-[9px] tracking-[0.2em] text-muted-foreground">
+                {compassLabel(bearing)} · ~{walkMinutes(dist)} MIN WALK
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* controls, thumb side */}
+      <div className="absolute bottom-56 right-3 z-[500] flex flex-col gap-2">
         <button className="ctrl" aria-label="Zoom in" onClick={() => mapRef.current?.zoomIn()}>
           <Plus className="h-4 w-4" />
         </button>
@@ -193,7 +226,7 @@ function Index() {
         </button>
         <button
           className="ctrl"
-          aria-label="Recenter on player"
+          aria-label="Recenter on me"
           onClick={() => {
             setFollow(true);
             mapRef.current?.setView([player.lat, player.lng], 16);
@@ -204,14 +237,13 @@ function Index() {
         <button
           className="ctrl"
           aria-label="Toggle grid"
-          data-active={showGrid}
           onClick={() => setShowGrid((v) => !v)}
         >
-          <Grid3x3 className={showGrid ? "h-4 w-4" : "h-4 w-4 opacity-40"} />
+          <Grid3x3 className={showGrid ? "h-4 w-4 text-accent" : "h-4 w-4 opacity-40"} />
         </button>
         <button
           className="ctrl"
-          aria-label="Frame destination"
+          aria-label="Show the whole route"
           onClick={() => {
             setFollow(false);
             mapRef.current?.fitBounds(
@@ -227,61 +259,38 @@ function Index() {
         </button>
       </div>
 
-      {/* compass */}
-      <div className="panel absolute right-2 top-16 z-[500] grid h-14 w-14 place-items-center rounded-full sm:right-3 sm:top-20">
-        <Compass
-          className="h-7 w-7 text-accent transition-transform duration-300"
-          style={{ transform: `rotate(${bearing}deg)` }}
-        />
-        <span className="absolute -bottom-5 whitespace-nowrap text-[10px] tracking-widest text-muted-foreground">
-          {compassLabel(bearing)}
-          {heading !== null && (
-            <span className="ml-1 text-accent">
-              {Math.round(heading)}°{headingSource === "compass" ? "" : "~"}
-            </span>
-          )}
-        </span>
-      </div>
-
-      {/* distance readout */}
-      <div className="pointer-events-none absolute inset-x-0 top-14 z-[500] flex justify-center sm:top-16">
-        <div className="panel rounded px-4 py-2 text-center">
-          {arrived ? (
-            <p className="text-sm font-bold tracking-[0.25em] text-accent sm:text-base">
-              DESTINATION REACHED
+      {/* coordinate console */}
+      <div className="absolute inset-x-0 bottom-0 z-[500] p-3">
+        <div className="panel rounded-2xl p-4">
+          <div className="flex items-baseline justify-between">
+            <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+              Where you are
             </p>
-          ) : (
-            <>
-              <p className="text-[9px] tracking-[0.25em] text-muted-foreground">
-                DISTANCE TO DESTINATION
-              </p>
-              <p className="text-xl font-bold tracking-widest text-foreground sm:text-2xl">
-                {formatDistance(dist)}
-              </p>
-            </>
-          )}
-        </div>
-      </div>
+            <p className="text-[11px] tracking-[0.2em] text-accent">SECTOR {sectorCode(player)}</p>
+          </div>
 
-      {/* bottom panel */}
-      <div className="absolute inset-x-0 bottom-0 z-[500] p-2 sm:p-3">
-        <div className="panel rounded p-3">
-          <p className="text-[10px] tracking-[0.25em] text-accent">TODAY&apos;S EXPEDITION</p>
-          <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] sm:grid-cols-4 sm:text-xs">
-            <Row label="Destination" value="Unknown" />
-            <Row label="Distance" value={formatDistance(dist)} />
-            <Row label="Direction" value={compassLabel(bearing)} />
-            <Row label="Status" value={arrived ? "Arrived" : "Exploring"} />
-          </dl>
-          <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-2 text-[10px] tracking-widest">
-            <span className="text-muted-foreground">
-              ✕ X: {dc.x} Z: {dc.z}
-            </span>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <Coord axis="X" value={pc.x} />
+            <Coord axis="Z" value={pc.z} />
+          </div>
+
+          <div className="ticks mt-4 h-1.5 rounded-full opacity-60" aria-hidden />
+
+          <div className="mt-3 flex items-end justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+                The ✕ you&apos;re walking to
+              </p>
+              <p className="coord-num mt-1 text-sm text-accent">
+                X {group(dc.x)} · Z {group(dc.z)}
+              </p>
+            </div>
             <button
               onClick={end}
-              className="inline-flex items-center gap-1 rounded border border-destructive/60 px-2 py-1 text-destructive transition-colors hover:bg-destructive/15"
+              className="shrink-0 rounded-lg border border-border px-3 py-2 text-[10px] tracking-[0.18em] text-muted-foreground transition-colors hover:border-destructive/60 hover:text-destructive"
             >
-              <XIcon className="h-3 w-3" /> END EXPEDITION
+              <XIcon className="mr-1 inline h-3 w-3" />
+              GIVE UP
             </button>
           </div>
         </div>
@@ -290,11 +299,19 @@ function Index() {
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function group(n: number) {
+  const s = Math.abs(n).toString();
+  const grouped = s.replace(/\B(?=(\d{3})+(?!\d))/g, "\u2009");
+  return (n < 0 ? "−" : "") + grouped;
+}
+
+function Coord({ axis, value }: { axis: string; value: number }) {
   return (
-    <div className="flex justify-between gap-2 sm:block">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="font-bold text-foreground">{value}</dd>
+    <div className="rounded-xl border border-border/70 bg-secondary/40 px-3 py-2">
+      <p className="text-[10px] tracking-[0.3em] text-accent">{axis}</p>
+      <p className="coord-num mt-0.5 text-[clamp(1.5rem,7vw,2.25rem)] leading-none">
+        {group(value)}
+      </p>
     </div>
   );
 }
@@ -309,39 +326,55 @@ function StartScreen({
   error: string | null;
 }) {
   return (
-    <main className="relative grid min-h-[100dvh] place-items-center overflow-hidden bg-background px-5 text-foreground">
+    <main className="relative grid min-h-[100dvh] place-items-center overflow-hidden bg-background px-5 py-10 text-foreground">
       <div
         aria-hidden
-        className="absolute inset-0 opacity-40"
+        className="absolute inset-0 opacity-50"
         style={{
           backgroundImage:
-            "linear-gradient(oklch(0.62 0.19 258 / .25) 1px, transparent 1px), linear-gradient(90deg, oklch(0.62 0.19 258 / .25) 1px, transparent 1px)",
-          backgroundSize: "48px 48px",
-          maskImage: "radial-gradient(circle at 50% 45%, black, transparent 75%)",
+            "linear-gradient(oklch(0.8 0.15 78 / .12) 1px, transparent 1px), linear-gradient(90deg, oklch(0.8 0.15 78 / .12) 1px, transparent 1px)",
+          backgroundSize: "56px 56px",
+          maskImage: "radial-gradient(circle at 50% 40%, black, transparent 78%)",
         }}
       />
-      <div className="panel relative z-10 w-full max-w-sm rounded p-6 text-center">
-        <p className="text-[10px] tracking-[0.35em] text-accent">TODAY&apos;S EXPEDITION</p>
-        <h1 className="mt-4 text-xl font-bold leading-relaxed tracking-wide">
-          Somewhere out there is a place you&apos;ve never visited.
+      <div className="relative z-10 w-full max-w-sm">
+        <p className="text-[10px] uppercase tracking-[0.35em] text-accent">Today</p>
+        <h1 className="mt-3 text-[1.65rem] font-bold leading-snug">
+          There&apos;s a spot near you
+          <br />
+          you&apos;ve never stood on.
         </h1>
-        <div className="my-6 grid gap-1 text-[11px] tracking-widest text-muted-foreground">
-          <p>DISTANCE: APPROXIMATELY 2–7 KM</p>
-          <p>DESTINATION: UNKNOWN</p>
+        <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+          No landmark, no prize. Just a mark on the map somewhere between two and seven kilometres
+          away, and the walk it takes to get there.
+        </p>
+
+        <div className="panel mt-7 rounded-2xl p-4">
+          <div className="flex items-center justify-between text-[11px] tracking-[0.18em] text-muted-foreground">
+            <span>DISTANCE</span>
+            <span className="coord-num text-sm text-foreground">2–7 KM</span>
+          </div>
+          <div className="mt-2 flex items-center justify-between text-[11px] tracking-[0.18em] text-muted-foreground">
+            <span>DESTINATION</span>
+            <span className="coord-num text-sm text-accent">UNKNOWN</span>
+          </div>
+          <div className="ticks mt-4 h-1.5 rounded-full opacity-60" aria-hidden />
+          <button
+            onClick={onBegin}
+            disabled={loading}
+            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 text-xs font-bold tracking-[0.22em] text-primary-foreground transition-transform hover:brightness-110 active:translate-y-px disabled:opacity-70"
+          >
+            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+            {loading ? "FINDING YOU…" : "GIVE ME A PLACE"}
+          </button>
         </div>
-        <button
-          onClick={onBegin}
-          disabled={loading}
-          className="inline-flex w-full items-center justify-center gap-2 rounded border border-border bg-primary px-4 py-3 text-xs font-bold tracking-[0.25em] text-primary-foreground shadow-[var(--glow-primary)] transition-transform hover:brightness-110 active:translate-y-px disabled:opacity-70"
-        >
-          {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-          {loading ? "LOCATING…" : "BEGIN EXPEDITION"}
-        </button>
+
         {error && <p className="mt-4 text-[11px] leading-snug text-destructive">{error}</p>}
         <p className="mt-5 text-[10px] leading-relaxed tracking-wide text-muted-foreground">
-          Location access is required to place you on the map.
+          We need your location to drop you on the map. Nothing leaves your phone.
         </p>
       </div>
     </main>
   );
 }
+
