@@ -12,6 +12,7 @@ import {
   rollDestination,
   type LatLng,
 } from "@/lib/expedition";
+import { useHeading } from "@/lib/use-heading";
 
 const ExpeditionMap = lazy(() => import("@/components/ExpeditionMap"));
 
@@ -175,8 +176,9 @@ function Index() {
           <span className="tracking-widest text-foreground">
             X: {pc.x} <span className="text-muted-foreground">Z:</span> {pc.z}
           </span>
-          <span className="hidden tracking-[0.2em] text-muted-foreground sm:inline">
-            MAP: UNKNOWN TERRITORY
+          <span className="tracking-[0.2em] text-muted-foreground">
+            <span className={fixAge < 8 ? "text-accent" : "text-destructive"}>●</span> GPS{" "}
+            {accuracy !== null ? `±${Math.round(accuracy)}M` : "--"}
           </span>
         </div>
       </div>
