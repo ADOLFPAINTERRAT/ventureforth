@@ -167,12 +167,13 @@ export default function ExpeditionMap({
           className="pointer-events-none absolute inset-0 z-[401]"
           style={{
             backgroundImage:
-              "linear-gradient(rgba(175,210,255,0.32) 1px, transparent 1px), linear-gradient(90deg, rgba(175,210,255,0.32) 1px, transparent 1px)",
+              "linear-gradient(rgba(235,205,150,0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(235,205,150,0.16) 1px, transparent 1px)",
             backgroundSize: `${grid.size}px ${grid.size}px`,
             backgroundPosition: `${grid.ox}px ${grid.oy}px`,
           }}
         />
       )}
+
       <div className="map-tint" aria-hidden />
     </div>
   );
