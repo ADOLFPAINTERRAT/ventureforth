@@ -233,8 +233,13 @@ function Index() {
           className="h-7 w-7 text-accent transition-transform duration-300"
           style={{ transform: `rotate(${bearing}deg)` }}
         />
-        <span className="absolute -bottom-5 text-[10px] tracking-widest text-muted-foreground">
+        <span className="absolute -bottom-5 whitespace-nowrap text-[10px] tracking-widest text-muted-foreground">
           {compassLabel(bearing)}
+          {heading !== null && (
+            <span className="ml-1 text-accent">
+              {Math.round(heading)}°{headingSource === "compass" ? "" : "~"}
+            </span>
+          )}
         </span>
       </div>
 
