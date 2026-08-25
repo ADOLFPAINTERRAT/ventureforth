@@ -126,16 +126,18 @@ export default function ExpeditionMap({
         destRef.current = L.marker(dll, { icon: destIcon, interactive: false }).addTo(map);
         ringRef.current = L.circle(dll, {
           radius: ARRIVAL_RADIUS,
-          color: "oklch(0.85 0.17 190)",
+          color: "oklch(0.72 0.2 35)",
           weight: 1,
-          fillOpacity: 0.12,
+          fillColor: "oklch(0.72 0.2 35)",
+          fillOpacity: 0.1,
         }).addTo(map);
         lineRef.current = L.polyline([ll, dll], {
-          color: "oklch(0.78 0.16 190)",
+          color: "oklch(0.8 0.15 78)",
           weight: 1.5,
-          dashArray: "6 10",
-          opacity: 0.7,
+          dashArray: "2 9",
+          opacity: 0.55,
         }).addTo(map);
+
       }
       lineRef.current?.setLatLngs([ll, dll]);
     }
