@@ -94,10 +94,8 @@ function Index() {
       } else if (prevRef.current && moved > 3) {
         pushGps(bearingDegrees(prevRef.current, next));
       }
-      if (!prevRef.current || moved > 0.5) {
-        prevRef.current = next;
-        setPlayer(next);
-      }
+      prevRef.current = next;
+      setPlayer(next);
     };
 
     navigator.geolocation.getCurrentPosition(
@@ -121,7 +119,7 @@ function Index() {
             maximumAge: 0,
             timeout: 15000,
           });
-        }, 3000);
+        }, 1000);
       },
       (err) => {
         setPhase("start");

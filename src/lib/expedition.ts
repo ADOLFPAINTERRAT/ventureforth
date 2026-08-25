@@ -54,8 +54,9 @@ export function rollDestination(origin: LatLng): LatLng {
 
 /** Fictional Minecraft-style exploration grid derived from real coordinates. */
 export function gameCoords(p: LatLng) {
-  const x = Math.round((p.lng * 111320 * Math.cos(toRad(p.lat))) / 8) % 100000;
-  const z = Math.round((-p.lat * 110540) / 8) % 100000;
+  // 1 grid unit = 1 metre, so the readout moves with every step.
+  const x = Math.round(p.lng * 111320 * Math.cos(toRad(p.lat))) % 100000;
+  const z = Math.round(-p.lat * 110540) % 100000;
   return { x, z };
 }
 
@@ -69,8 +70,8 @@ export const ARRIVAL_RADIUS = 40;
 export function sectorCode(p: LatLng) {
   const { x, z } = gameCoords(p);
   const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-  const l = letters[Math.abs(Math.floor(x / 64)) % letters.length] ?? "A";
-  const n = Math.abs(Math.floor(z / 64)) % 100;
+  const l = letters[Math.abs(Math.floor(x / 512)) % letters.length] ?? "A";
+  const n = Math.abs(Math.floor(z / 512)) % 100;
   return `${l}-${String(n).padStart(2, "0")}`;
 }
 
