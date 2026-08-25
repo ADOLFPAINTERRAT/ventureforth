@@ -10,6 +10,9 @@ import {
   formatDistance,
   gameCoords,
   rollDestination,
+  sectorCode,
+  walkMinutes,
+
   type LatLng,
 } from "@/lib/expedition";
 import { useHeading } from "@/lib/use-heading";
