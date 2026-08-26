@@ -1,12 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import type { LatLng } from "@/lib/expedition";
-import { ARRIVAL_RADIUS } from "@/lib/expedition";
+import { ARRIVAL_RADIUS, REVEAL_RADIUS, destinationFrom, gameCoords } from "@/lib/expedition";
 
 type Props = {
   player: LatLng;
   heading: number | null;
   destination: LatLng | null;
+  /** destination is only drawn once the player has uncovered that patch of map */
+  destinationVisible: boolean;
+  /** everywhere the player has physically been this expedition */
+  trail: LatLng[];
+  arrived: boolean;
   showGrid: boolean;
   follow: boolean;
   onUserPan: () => void;
@@ -20,6 +25,7 @@ function playerIcon() {
     iconAnchor: [28, 28],
     html: `
       <div style="position:relative;width:56px;height:56px;display:grid;place-items:center;">
+        <div class="player-aura" style="position:absolute;width:120px;height:120px;border-radius:50%;opacity:0;"></div>
         <div class="player-arrow" style="position:absolute;inset:0;transition:transform .1s linear;opacity:0;">
           <div style="position:absolute;left:50%;top:-1px;translate:-50% 0;width:0;height:0;
             border-left:8px solid transparent;border-right:8px solid transparent;
@@ -51,17 +57,30 @@ const destIcon = L.divIcon({
     </div>`,
 });
 
+/** metres → screen pixels at the map's current centre/zoom */
+function metresToPixels(map: L.Map, metres: number) {
+  const c = map.getCenter();
+  const a = map.latLngToContainerPoint(c);
+  const east = destinationFrom({ lat: c.lat, lng: c.lng }, 90, metres);
+  const b = map.latLngToContainerPoint(L.latLng(east.lat, east.lng));
+  return Math.max(1, Math.abs(b.x - a.x));
+}
 
 export default function ExpeditionMap({
   player,
   heading,
   destination,
+  destinationVisible,
+  trail,
+  arrived,
   showGrid,
   follow,
   onUserPan,
   onMapReady,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const fogRef = useRef<HTMLCanvasElement>(null);
+  const gridRef = useRef<HTMLCanvasElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const playerRef = useRef<L.Marker | null>(null);
   const destRef = useRef<L.Marker | null>(null);
@@ -69,7 +88,7 @@ export default function ExpeditionMap({
   const lineRef = useRef<L.Polyline | null>(null);
   const programmatic = useRef(false);
   const [ready, setReady] = useState(false);
-  const [grid, setGrid] = useState({ size: 128, ox: 0, oy: 0 });
+  const [, setTick] = useState(0);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -89,14 +108,8 @@ export default function ExpeditionMap({
       zIndexOffset: 1000,
     }).addTo(map);
 
-    const syncGrid = () => {
-      const o = map.getPixelOrigin();
-      const z = map.getZoom();
-      const size = 96 * Math.pow(2, z - Math.floor(z));
-      setGrid({ size, ox: -(o.x % size), oy: -(o.y % size) });
-    };
-    map.on("move zoom viewreset", syncGrid);
-    syncGrid();
+    const redraw = () => setTick((t) => t + 1);
+    map.on("move zoom viewreset resize moveend zoomend", redraw);
 
     map.on("dragstart", () => {
       if (!programmatic.current) onUserPan();
@@ -114,13 +127,14 @@ export default function ExpeditionMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // player position
+  // player position + destination overlays
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     const ll = L.latLng(player.lat, player.lng);
     playerRef.current?.setLatLng(ll);
-    if (destination) {
+
+    if (destination && destinationVisible) {
       const dll = L.latLng(destination.lat, destination.lng);
       if (!destRef.current) {
         destRef.current = L.marker(dll, { icon: destIcon, interactive: false }).addTo(map);
@@ -137,45 +151,149 @@ export default function ExpeditionMap({
           dashArray: "2 9",
           opacity: 0.55,
         }).addTo(map);
-
       }
+      destRef.current.setLatLng(dll);
+      ringRef.current?.setLatLng(dll);
       lineRef.current?.setLatLngs([ll, dll]);
+    } else {
+      destRef.current?.remove();
+      ringRef.current?.remove();
+      lineRef.current?.remove();
+      destRef.current = null;
+      ringRef.current = null;
+      lineRef.current = null;
     }
+
     if (follow) {
       programmatic.current = true;
       map.panTo(ll, { animate: true });
       setTimeout(() => (programmatic.current = false), 400);
     }
-  }, [player, destination, follow, ready]);
+  }, [player, destination, destinationVisible, follow, ready]);
 
-  // rotate the heading arrow without rebuilding the marker (keeps it snappy)
+  // heading arrow + arrival aura
   useEffect(() => {
-    const el = playerRef.current?.getElement()?.querySelector<HTMLElement>(".player-arrow");
-    if (!el) return;
-    if (heading === null) {
-      el.style.opacity = "0";
-      return;
+    const root = playerRef.current?.getElement();
+    const el = root?.querySelector<HTMLElement>(".player-arrow");
+    if (el) {
+      if (heading === null) el.style.opacity = "0";
+      else {
+        el.style.opacity = "1";
+        el.style.transform = `rotate(${heading}deg)`;
+      }
     }
-    el.style.opacity = "1";
-    el.style.transform = `rotate(${heading}deg)`;
-  }, [heading, player, ready]);
+    const aura = root?.querySelector<HTMLElement>(".player-aura");
+    if (aura) aura.classList.toggle("is-on", arrived);
+  }, [heading, player, arrived, ready]);
+
+  // ── fog of war ─────────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    const cv = fogRef.current;
+    if (!map || !cv) return;
+    const size = map.getSize();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = size.x * dpr;
+    cv.height = size.y * dpr;
+    cv.style.width = `${size.x}px`;
+    cv.style.height = `${size.y}px`;
+    const ctx = cv.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, size.x, size.y);
+    ctx.fillStyle = "rgba(8, 12, 20, 0.965)";
+    ctx.fillRect(0, 0, size.x, size.y);
+
+    const r = metresToPixels(map, REVEAL_RADIUS);
+    const pts = (trail.length ? trail : [player]).map((p) =>
+      map.latLngToContainerPoint(L.latLng(p.lat, p.lng)),
+    );
+
+    ctx.globalCompositeOperation = "destination-out";
+    // continuous trail between fixes
+    ctx.lineWidth = r * 1.6;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "rgba(0,0,0,1)";
+    ctx.beginPath();
+    pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+    if (pts.length > 1) ctx.stroke();
+    // soft-edged discs
+    for (const p of pts) {
+      const g = ctx.createRadialGradient(p.x, p.y, r * 0.55, p.x, p.y, r);
+      g.addColorStop(0, "rgba(0,0,0,1)");
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = "source-over";
+  });
+
+  // ── in-world X/Z coordinate grid + labels ──────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    const cv = gridRef.current;
+    if (!map || !cv) return;
+    const size = map.getSize();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = size.x * dpr;
+    cv.height = size.y * dpr;
+    cv.style.width = `${size.x}px`;
+    cv.style.height = `${size.y}px`;
+    const ctx = cv.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, size.x, size.y);
+    if (!showGrid) return;
+
+    const b = map.getBounds();
+    const nw = { lat: b.getNorth(), lng: b.getWest() };
+    const se = { lat: b.getSouth(), lng: b.getEast() };
+    const tl = gameCoords(nw);
+    const br = gameCoords(se);
+
+    // pick a spacing that renders ~90–200px apart
+    const mpp = REVEAL_RADIUS / metresToPixels(map, REVEAL_RADIUS);
+    const steps = [50, 100, 250, 500, 1000, 2500, 5000, 10000];
+    const step = steps.find((s) => s / mpp > 90) ?? 10000;
+
+    const cosLat = Math.cos((map.getCenter().lat * Math.PI) / 180);
+    const lngForX = (x: number) => x / (111320 * cosLat);
+    const latForZ = (z: number) => -z / 110540;
+
+    ctx.font = "600 10px ui-monospace, monospace";
+    ctx.fillStyle = "rgba(235,205,150,0.55)";
+    ctx.strokeStyle = "rgba(235,205,150,0.16)";
+    ctx.lineWidth = 1;
+
+    const x0 = Math.ceil(Math.min(tl.x, br.x) / step) * step;
+    for (let x = x0; x <= Math.max(tl.x, br.x); x += step) {
+      const px = map.latLngToContainerPoint(L.latLng(map.getCenter().lat, lngForX(x))).x;
+      ctx.beginPath();
+      ctx.moveTo(px + 0.5, 0);
+      ctx.lineTo(px + 0.5, size.y);
+      ctx.stroke();
+      ctx.fillText(`X ${x}`, px + 5, 14);
+    }
+
+    const z0 = Math.ceil(Math.min(tl.z, br.z) / step) * step;
+    for (let z = z0; z <= Math.max(tl.z, br.z); z += step) {
+      const py = map.latLngToContainerPoint(L.latLng(latForZ(z), map.getCenter().lng)).y;
+      ctx.beginPath();
+      ctx.moveTo(0, py + 0.5);
+      ctx.lineTo(size.x, py + 0.5);
+      ctx.stroke();
+      ctx.fillText(`Z ${z}`, 6, py - 4);
+    }
+  });
 
   return (
     <div className="absolute inset-0">
       <div ref={containerRef} className="absolute inset-0 h-full w-full" />
-      {showGrid && (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 z-[401]"
-          style={{
-            backgroundImage:
-              "linear-gradient(rgba(235,205,150,0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(235,205,150,0.16) 1px, transparent 1px)",
-            backgroundSize: `${grid.size}px ${grid.size}px`,
-            backgroundPosition: `${grid.ox}px ${grid.oy}px`,
-          }}
-        />
-      )}
-
+      <canvas ref={gridRef} aria-hidden className="pointer-events-none absolute inset-0 z-[401]" />
+      <canvas ref={fogRef} aria-hidden className="pointer-events-none absolute inset-0 z-[402]" />
       <div className="map-tint" aria-hidden />
     </div>
   );
