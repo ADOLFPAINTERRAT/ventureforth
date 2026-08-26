@@ -79,3 +79,70 @@ export function sectorCode(p: LatLng) {
 export function walkMinutes(meters: number) {
   return Math.max(1, Math.round(meters / 80));
 }
+
+/** How much map (in metres) the player reveals around themselves as they walk. */
+export const REVEAL_RADIUS = 220;
+
+/** Has this point been uncovered by the player's exploration trail? */
+export function isDiscovered(p: LatLng, trail: LatLng[], radius = REVEAL_RADIUS) {
+  return trail.some((t) => distanceMeters(t, p) <= radius);
+}
+
+export type Cone = {
+  /** centre bearing of the cone, degrees from north */
+  bearing: number;
+  /** half angle of the cone in degrees */
+  halfWidth: number;
+  /** furthest allowed distance in metres */
+  length: number;
+};
+
+/** Random point inside a directional cone anchored at the player. */
+export function randomPointInCone(origin: LatLng, cone: Cone): LatLng {
+  const minM = Math.max(400, cone.length * 0.35);
+  const maxM = Math.max(minM + 200, cone.length);
+  // sqrt keeps the picks area-uniform instead of clustering near the player
+  const meters = Math.sqrt(minM * minM + Math.random() * (maxM * maxM - minM * minM));
+  const bearing = cone.bearing + (Math.random() * 2 - 1) * cone.halfWidth;
+  return destinationFrom(origin, bearing, meters);
+}
+
+const BAD_CLASS = new Set(["water", "waterway", "military", "aeroway", "railway"]);
+const BAD_TYPE = new Set([
+  "water", "bay", "strait", "sea", "ocean", "reservoir", "river", "lake",
+  "motorway", "motorway_link", "trunk", "trunk_link", "runway", "quarry",
+]);
+
+/** Cheap OSM sanity check — rejects water, motorways and restricted land. */
+async function looksReachable(p: LatLng): Promise<boolean> {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 2500);
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=16&lat=${p.lat}&lon=${p.lng}`,
+      { signal: ctrl.signal, headers: { Accept: "application/json" } },
+    );
+    clearTimeout(t);
+    if (!res.ok) return true;
+    const j = (await res.json()) as { class?: string; type?: string; error?: string };
+    if (j.error) return false; // nothing mapped here at all — usually open water
+    if (j.class && BAD_CLASS.has(j.class)) return false;
+    if (j.type && BAD_TYPE.has(j.type)) return false;
+    return true;
+  } catch {
+    return true; // offline / rate-limited: don't block the game
+  }
+}
+
+/** Pick a random, plausibly reachable destination inside the chosen zone. */
+export async function pickDestinationInCone(origin: LatLng, cone: Cone): Promise<LatLng> {
+  let first: LatLng | null = null;
+  for (let i = 0; i < 5; i++) {
+    const cand = randomPointInCone(origin, cone);
+    if (!first) first = cand;
+    if (await looksReachable(cand)) return cand;
+  }
+  return first ?? randomPointInCone(origin, cone);
+}
+
+export const DEFAULT_CONE: Cone = { bearing: 0, halfWidth: 25, length: 4000 };
