@@ -1,23 +1,38 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type L from "leaflet";
-import { Compass, Crosshair, Grid3x3, Minus, Plus, Flag, X as XIcon, Loader2 } from "lucide-react";
+import {
+  Compass,
+  Crosshair,
+  Grid3x3,
+  Minus,
+  Plus,
+  Flag,
+  Navigation,
+  X as XIcon,
+  Loader2,
+  Trophy,
+} from "lucide-react";
 import {
   ARRIVAL_RADIUS,
+  DEFAULT_CONE,
   bearingDegrees,
   compassLabel,
   distanceMeters,
   formatDistance,
   gameCoords,
+  isDiscovered,
+  pickDestinationInCone,
   rollDestination,
   sectorCode,
   walkMinutes,
-
+  type Cone,
   type LatLng,
 } from "@/lib/expedition";
 import { useHeading } from "@/lib/use-heading";
 
 const ExpeditionMap = lazy(() => import("@/components/ExpeditionMap"));
+const DirectionTool = lazy(() => import("@/components/DirectionTool"));
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -26,13 +41,13 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Turn your city into a game map. Get a mystery destination 2–7 km away, track it live on a game-style map and go find it.",
+          "Turn your city into a game map. Pick a direction, get a mystery destination, reveal the fog by walking and level up when you arrive.",
       },
       { property: "og:title", content: "Expedition — Real-World Exploration Game" },
       {
         property: "og:description",
         content:
-          "A mystery destination, a game map grid and your live GPS position. Go outside and explore.",
+          "Fog of war, a coordinate grid world and your live GPS position. Go outside and explore.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -42,22 +57,44 @@ export const Route = createFileRoute("/")({
 });
 
 type Phase = "start" | "locating" | "active";
+const TRAIL_STEP = 70; // metres between recorded discovery points
+const LEVEL_KEY = "expedition:level";
 
 function Index() {
   const [phase, setPhase] = useState<Phase>("start");
   const [player, setPlayer] = useState<LatLng | null>(null);
   const [accuracy, setAccuracy] = useState<number | null>(null);
   const [fixAge, setFixAge] = useState(0);
-  const { heading, source: headingSource, begin: startCompass, pushGps } = useHeading();
+  const { heading, begin: startCompass, pushGps } = useHeading();
   const [destination, setDestination] = useState<LatLng | null>(null);
+  const [trail, setTrail] = useState<LatLng[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showGrid, setShowGrid] = useState(true);
   const [follow, setFollow] = useState(true);
+  const [level, setLevel] = useState(1);
+  const [completed, setCompleted] = useState(0);
+  const [celebrating, setCelebrating] = useState(false);
+  const [toolOpen, setToolOpen] = useState(false);
+  const [cone, setCone] = useState<Cone>(DEFAULT_CONE);
+  const [scouting, setScouting] = useState(false);
   const mapRef = useRef<L.Map | null>(null);
   const watchRef = useRef<number | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevRef = useRef<LatLng | null>(null);
   const lastFixRef = useRef<number>(Date.now());
+
+  useEffect(() => {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(LEVEL_KEY) : null;
+    if (raw) {
+      const v = JSON.parse(raw) as { level?: number; completed?: number };
+      setLevel(v.level ?? 1);
+      setCompleted(v.completed ?? 0);
+    }
+  }, []);
+
+  const persist = useCallback((lvl: number, done: number) => {
+    window.localStorage.setItem(LEVEL_KEY, JSON.stringify({ level: lvl, completed: done }));
+  }, []);
 
   const stopTracking = useCallback(() => {
     if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current);
@@ -68,12 +105,22 @@ function Index() {
 
   useEffect(() => () => stopTracking(), [stopTracking]);
 
-  // "seconds since last GPS fix" indicator
   useEffect(() => {
     if (phase !== "active") return;
-    const id = setInterval(() => setFixAge(Math.round((Date.now() - lastFixRef.current) / 1000)), 1000);
+    const id = setInterval(
+      () => setFixAge(Math.round((Date.now() - lastFixRef.current) / 1000)),
+      1000,
+    );
     return () => clearInterval(id);
   }, [phase]);
+
+  const revealAt = useCallback((p: LatLng) => {
+    setTrail((t) => {
+      const last = t[t.length - 1];
+      if (last && distanceMeters(last, p) < TRAIL_STEP) return t;
+      return [...t, p];
+    });
+  }, []);
 
   const begin = useCallback(() => {
     if (!("geolocation" in navigator)) {
@@ -82,20 +129,25 @@ function Index() {
     }
     setError(null);
     setPhase("locating");
-    startCompass(); // must happen inside the tap gesture (iOS permission)
+    startCompass();
 
     const onFix = (p: GeolocationPosition) => {
       const next = { lat: p.coords.latitude, lng: p.coords.longitude };
       lastFixRef.current = Date.now();
       setAccuracy(p.coords.accuracy ?? null);
       const moved = prevRef.current ? distanceMeters(prevRef.current, next) : 0;
-      if (p.coords.heading !== null && !Number.isNaN(p.coords.heading) && (p.coords.speed ?? 0) > 0.5) {
+      if (
+        p.coords.heading !== null &&
+        !Number.isNaN(p.coords.heading) &&
+        (p.coords.speed ?? 0) > 0.5
+      ) {
         pushGps(p.coords.heading);
       } else if (prevRef.current && moved > 3) {
         pushGps(bearingDegrees(prevRef.current, next));
       }
       prevRef.current = next;
       setPlayer(next);
+      revealAt(next);
     };
 
     navigator.geolocation.getCurrentPosition(
@@ -104,15 +156,16 @@ function Index() {
         prevRef.current = here;
         lastFixRef.current = Date.now();
         setPlayer(here);
+        setTrail([here]);
         setAccuracy(pos.coords.accuracy ?? null);
         setDestination(rollDestination(here));
+        setCelebrating(false);
         setPhase("active");
         watchRef.current = navigator.geolocation.watchPosition(onFix, () => {}, {
           enableHighAccuracy: true,
           maximumAge: 0,
           timeout: 30000,
         });
-        // some browsers throttle watchPosition heavily — poll as a safety net
         pollRef.current = setInterval(() => {
           navigator.geolocation.getCurrentPosition(onFix, () => {}, {
             enableHighAccuracy: true,
@@ -131,26 +184,62 @@ function Index() {
       },
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
     );
-  }, [pushGps, startCompass]);
+  }, [pushGps, revealAt, startCompass]);
 
   const end = useCallback(() => {
     stopTracking();
     prevRef.current = null;
     setDestination(null);
     setPlayer(null);
+    setTrail([]);
     setAccuracy(null);
+    setCelebrating(false);
+    setToolOpen(false);
     setPhase("start");
   }, [stopTracking]);
 
+  const dist = player && destination ? distanceMeters(player, destination) : Infinity;
+  const arrived = dist <= ARRIVAL_RADIUS;
 
+  // level up strictly on physical arrival
+  useEffect(() => {
+    if (phase !== "active" || !arrived || celebrating) return;
+    setCelebrating(true);
+    setLevel((l) => {
+      const next = l + 1;
+      setCompleted((c) => {
+        persist(next, c + 1);
+        return c + 1;
+      });
+      return next;
+    });
+  }, [arrived, phase, celebrating, persist]);
+
+  const rollNext = useCallback(
+    async (withCone?: Cone) => {
+      if (!player) return;
+      setScouting(true);
+      try {
+        const next = withCone
+          ? await pickDestinationInCone(player, withCone)
+          : rollDestination(player);
+        setDestination(next);
+        setCelebrating(false);
+        setToolOpen(false);
+        setFollow(true);
+      } finally {
+        setScouting(false);
+      }
+    },
+    [player],
+  );
 
   if (phase !== "active" || !player || !destination) {
-    return <StartScreen onBegin={begin} loading={phase === "locating"} error={error} />;
+    return <StartScreen onBegin={begin} loading={phase === "locating"} error={error} level={level} />;
   }
 
-  const dist = distanceMeters(player, destination);
   const bearing = bearingDegrees(player, destination);
-  const arrived = dist <= ARRIVAL_RADIUS;
+  const destVisible = isDiscovered(destination, trail);
   const pc = gameCoords(player);
   const dc = gameCoords(destination);
 
@@ -161,8 +250,11 @@ function Index() {
           player={player}
           heading={heading}
           destination={destination}
+          destinationVisible={destVisible}
+          trail={trail}
+          arrived={celebrating}
           showGrid={showGrid}
-          follow={follow}
+          follow={follow && !toolOpen}
           onUserPan={() => setFollow(false)}
           onMapReady={(m) => {
             mapRef.current = m;
@@ -173,8 +265,10 @@ function Index() {
       {/* top strip */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-[500] p-3">
         <div className="panel pointer-events-auto flex items-center justify-between gap-3 rounded-xl px-3 py-2">
-          <span className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
-            Field log
+          <span className="flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+            <span className="text-accent">LVL {level}</span>
+            <span className="opacity-50">·</span>
+            {completed} FOUND
           </span>
           <span className="flex items-center gap-1.5 text-[10px] tracking-[0.18em] text-muted-foreground">
             <span
@@ -190,15 +284,8 @@ function Index() {
       </div>
 
       {/* distance + compass, top centre */}
-      <div className="pointer-events-none absolute inset-x-0 top-[4.6rem] z-[500] flex flex-col items-center gap-2">
-        {arrived ? (
-          <div className="panel rounded-xl px-5 py-3 text-center">
-            <p className="text-base font-bold tracking-[0.2em] text-accent">YOU MADE IT</p>
-            <p className="mt-1 text-[10px] tracking-wider text-muted-foreground">
-              Have a look around before you head back.
-            </p>
-          </div>
-        ) : (
+      {!celebrating && (
+        <div className="pointer-events-none absolute inset-x-0 top-[4.6rem] z-[500] flex flex-col items-center gap-2">
           <div className="panel flex items-center gap-3 rounded-xl px-4 py-2.5">
             <Compass
               className="h-6 w-6 shrink-0 text-accent transition-transform duration-300"
@@ -208,91 +295,156 @@ function Index() {
               <p className="coord-num text-lg">{formatDistance(dist)}</p>
               <p className="mt-1 text-[9px] tracking-[0.2em] text-muted-foreground">
                 {compassLabel(bearing)} · ~{walkMinutes(dist)} MIN WALK
+                {!destVisible && " · UNCHARTED"}
               </p>
             </div>
-          </div>
-        )}
-      </div>
-
-      {/* controls, thumb side */}
-      <div className="absolute bottom-56 right-3 z-[500] flex flex-col gap-2">
-        <button className="ctrl" aria-label="Zoom in" onClick={() => mapRef.current?.zoomIn()}>
-          <Plus className="h-4 w-4" />
-        </button>
-        <button className="ctrl" aria-label="Zoom out" onClick={() => mapRef.current?.zoomOut()}>
-          <Minus className="h-4 w-4" />
-        </button>
-        <button
-          className="ctrl"
-          aria-label="Recenter on me"
-          onClick={() => {
-            setFollow(true);
-            mapRef.current?.setView([player.lat, player.lng], 16);
-          }}
-        >
-          <Crosshair className="h-4 w-4" />
-        </button>
-        <button
-          className="ctrl"
-          aria-label="Toggle grid"
-          onClick={() => setShowGrid((v) => !v)}
-        >
-          <Grid3x3 className={showGrid ? "h-4 w-4 text-accent" : "h-4 w-4 opacity-40"} />
-        </button>
-        <button
-          className="ctrl"
-          aria-label="Show the whole route"
-          onClick={() => {
-            setFollow(false);
-            mapRef.current?.fitBounds(
-              [
-                [player.lat, player.lng],
-                [destination.lat, destination.lng],
-              ],
-              { padding: [70, 70] },
-            );
-          }}
-        >
-          <Flag className="h-4 w-4" />
-        </button>
-      </div>
-
-      {/* coordinate console */}
-      <div className="absolute inset-x-0 bottom-0 z-[500] p-3">
-        <div className="panel rounded-2xl p-4">
-          <div className="flex items-baseline justify-between">
-            <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
-              Where you are
-            </p>
-            <p className="text-[11px] tracking-[0.2em] text-accent">SECTOR {sectorCode(player)}</p>
-          </div>
-
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <Coord axis="X" value={pc.x} />
-            <Coord axis="Z" value={pc.z} />
-          </div>
-
-          <div className="ticks mt-4 h-1.5 rounded-full opacity-60" aria-hidden />
-
-          <div className="mt-3 flex items-end justify-between gap-3">
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
-                The ✕ you&apos;re walking to
-              </p>
-              <p className="coord-num mt-1 text-sm text-accent">
-                X {group(dc.x)} · Z {group(dc.z)}
-              </p>
-            </div>
-            <button
-              onClick={end}
-              className="shrink-0 rounded-lg border border-border px-3 py-2 text-[10px] tracking-[0.18em] text-muted-foreground transition-colors hover:border-destructive/60 hover:text-destructive"
-            >
-              <XIcon className="mr-1 inline h-3 w-3" />
-              GIVE UP
-            </button>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* directional destination tool */}
+      {toolOpen && mapRef.current && (
+        <Suspense fallback={null}>
+          <DirectionTool
+            map={mapRef.current}
+            player={player}
+            cone={cone}
+            onChange={setCone}
+            onConfirm={() => rollNext(cone)}
+            onCancel={() => setToolOpen(false)}
+            busy={scouting}
+          />
+        </Suspense>
+      )}
+
+      {/* controls, thumb side */}
+      {!toolOpen && (
+        <div className="absolute bottom-56 right-3 z-[500] flex flex-col gap-2">
+          <button className="ctrl" aria-label="Zoom in" onClick={() => mapRef.current?.zoomIn()}>
+            <Plus className="h-4 w-4" />
+          </button>
+          <button className="ctrl" aria-label="Zoom out" onClick={() => mapRef.current?.zoomOut()}>
+            <Minus className="h-4 w-4" />
+          </button>
+          <button
+            className="ctrl"
+            aria-label="Recenter on me"
+            onClick={() => {
+              setFollow(true);
+              mapRef.current?.setView([player.lat, player.lng], 16);
+            }}
+          >
+            <Crosshair className="h-4 w-4" />
+          </button>
+          <button className="ctrl" aria-label="Toggle grid" onClick={() => setShowGrid((v) => !v)}>
+            <Grid3x3 className={showGrid ? "h-4 w-4 text-accent" : "h-4 w-4 opacity-40"} />
+          </button>
+          <button
+            className="ctrl"
+            aria-label="Choose a direction to explore"
+            onClick={() => {
+              setFollow(true);
+              mapRef.current?.setView([player.lat, player.lng], 13);
+              setToolOpen(true);
+            }}
+          >
+            <Navigation className="h-4 w-4 text-accent" />
+          </button>
+          <button
+            className="ctrl"
+            aria-label="Show the whole route"
+            disabled={!destVisible}
+            onClick={() => {
+              setFollow(false);
+              mapRef.current?.fitBounds(
+                [
+                  [player.lat, player.lng],
+                  [destination.lat, destination.lng],
+                ],
+                { padding: [70, 70] },
+              );
+            }}
+          >
+            <Flag className={destVisible ? "h-4 w-4" : "h-4 w-4 opacity-30"} />
+          </button>
+        </div>
+      )}
+
+      {/* completion */}
+      {celebrating && (
+        <div className="pointer-events-none absolute inset-0 z-[560] grid place-items-center p-6">
+          <div className="aura-burst" aria-hidden />
+          <div className="panel pointer-events-auto relative w-full max-w-xs rounded-2xl p-5 text-center">
+            <Trophy className="mx-auto h-7 w-7 text-accent" />
+            <p className="mt-3 text-base font-bold tracking-[0.24em] text-accent">
+              LEVEL COMPLETED
+            </p>
+            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+              You physically reached the mark. Level {level} unlocked · {completed} expeditions
+              found.
+            </p>
+            <div className="ticks mt-4 h-1.5 rounded-full opacity-60" aria-hidden />
+            <div className="mt-4 flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  setCelebrating(false);
+                  setToolOpen(true);
+                  mapRef.current?.setView([player.lat, player.lng], 13);
+                }}
+                className="rounded-xl bg-primary px-4 py-3 text-[10px] font-bold tracking-[0.22em] text-primary-foreground"
+              >
+                CHOOSE NEXT DIRECTION
+              </button>
+              <button
+                onClick={() => rollNext()}
+                disabled={scouting}
+                className="rounded-xl border border-border px-4 py-3 text-[10px] tracking-[0.2em] text-muted-foreground disabled:opacity-60"
+              >
+                {scouting ? "SCOUTING…" : "SURPRISE ME"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* coordinate console */}
+      {!toolOpen && (
+        <div className="absolute inset-x-0 bottom-0 z-[500] p-3">
+          <div className="panel rounded-2xl p-4">
+            <div className="flex items-baseline justify-between">
+              <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+                Where you are
+              </p>
+              <p className="text-[11px] tracking-[0.2em] text-accent">SECTOR {sectorCode(player)}</p>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <Coord axis="X" value={pc.x} />
+              <Coord axis="Z" value={pc.z} />
+            </div>
+
+            <div className="ticks mt-4 h-1.5 rounded-full opacity-60" aria-hidden />
+
+            <div className="mt-3 flex items-end justify-between gap-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+                  The ✕ you&apos;re walking to
+                </p>
+                <p className="coord-num mt-1 text-sm text-accent">
+                  {destVisible ? `X ${group(dc.x)} · Z ${group(dc.z)}` : "X ??? · Z ???"}
+                </p>
+              </div>
+              <button
+                onClick={end}
+                className="shrink-0 rounded-lg border border-border px-3 py-2 text-[10px] tracking-[0.18em] text-muted-foreground transition-colors hover:border-destructive/60 hover:text-destructive"
+              >
+                <XIcon className="mr-1 inline h-3 w-3" />
+                GIVE UP
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
@@ -318,10 +470,12 @@ function StartScreen({
   onBegin,
   loading,
   error,
+  level,
 }: {
   onBegin: () => void;
   loading: boolean;
   error: string | null;
+  level: number;
 }) {
   return (
     <main className="relative grid min-h-[100dvh] place-items-center overflow-hidden bg-background px-5 py-10 text-foreground">
@@ -336,15 +490,15 @@ function StartScreen({
         }}
       />
       <div className="relative z-10 w-full max-w-sm">
-        <p className="text-[10px] uppercase tracking-[0.35em] text-accent">Today</p>
+        <p className="text-[10px] uppercase tracking-[0.35em] text-accent">Level {level}</p>
         <h1 className="mt-3 text-[1.65rem] font-bold leading-snug">
           There&apos;s a spot near you
           <br />
           you&apos;ve never stood on.
         </h1>
         <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-          No landmark, no prize. Just a mark on the map somewhere between two and seven kilometres
-          away, and the walk it takes to get there.
+          Your map starts covered in fog. Walking is the only thing that uncovers it — and the mark
+          you&apos;re hunting stays hidden until you get close enough to chart it.
         </p>
 
         <div className="panel mt-7 rounded-2xl p-4">
@@ -375,4 +529,3 @@ function StartScreen({
     </main>
   );
 }
-
