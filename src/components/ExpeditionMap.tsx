@@ -260,6 +260,7 @@ export default function ExpeditionMap({
   useEffect(() => {
     const map = mapRef.current;
     const cv = gridRef.current;
+    console.log("[grid] effect", { map: !!map, cv: !!cv, showGrid });
     if (!map || !cv) return;
     const size = map.getSize();
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
