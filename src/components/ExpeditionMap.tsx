@@ -86,6 +86,8 @@ export default function ExpeditionMap({
   const destRef = useRef<L.Marker | null>(null);
   const ringRef = useRef<L.Circle | null>(null);
   const lineRef = useRef<L.Polyline | null>(null);
+  const trailRef = useRef<L.Polyline | null>(null);
+
   const programmatic = useRef(false);
   const [ready, setReady] = useState(false);
   const [, setTick] = useState(0);
