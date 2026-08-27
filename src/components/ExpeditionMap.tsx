@@ -260,6 +260,7 @@ export default function ExpeditionMap({
   useEffect(() => {
     const map = mapRef.current;
     const cv = gridRef.current;
+    console.log("[grid] effect", { map: !!map, cv: !!cv, showGrid });
     if (!map || !cv) return;
     const size = map.getSize();
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -322,23 +323,28 @@ export default function ExpeditionMap({
     if (minor) drawLines(minor, 0.07);
     drawLines(major, 0.2);
 
-    // labels repeated along each major line
-    ctx.font = "600 9px ui-monospace, monospace";
-    ctx.fillStyle = "rgba(235,205,150,0.5)";
-    ctx.textBaseline = "middle";
-    const labelGap = 220;
+    // Coordinate labels written directly along the grid lines, like a
+    // charted map: "X: 83176" repeated down each vertical line,
+    // "Z: 40231" repeated across each horizontal line.
+    // Label the finer (minor) grid instead of the major one when zoomed
+    // in far enough that minor lines are comfortably spaced.
+    const labelStep = minor && minor / mpp >= 90 ? minor : major;
+    const labelGap = Math.max(140, labelStep / mpp); // ~one label per cell
+    ctx.font = "600 10px ui-monospace, SFMono-Regular, monospace";
+    ctx.fillStyle = "rgba(235,205,150,0.55)";
 
-    for (let x = Math.ceil(xMin / major) * major; x <= xMax; x += major) {
+    ctx.textBaseline = "middle";
+    for (let x = Math.ceil(xMin / labelStep) * labelStep; x <= xMax; x += labelStep) {
       const px = pxForX(x);
-      if (px < -40 || px > size.x + 40) continue;
-      const text = `X ${x}`;
-      for (let y = 16; y < size.y; y += labelGap) ctx.fillText(text, px + 4, y);
+      if (px < -60 || px > size.x + 60) continue;
+      const text = `X: ${x}`;
+      for (let y = 14; y < size.y; y += labelGap) ctx.fillText(text, px + 4, y);
     }
     ctx.textBaseline = "alphabetic";
-    for (let z = Math.ceil(zMin / major) * major; z <= zMax; z += major) {
+    for (let z = Math.ceil(zMin / labelStep) * labelStep; z <= zMax; z += labelStep) {
       const py = pyForZ(z);
-      if (py < -40 || py > size.y + 40) continue;
-      const text = `Z ${z}`;
+      if (py < -60 || py > size.y + 60) continue;
+      const text = `Z: ${z}`;
       for (let x = 8; x < size.x; x += labelGap) ctx.fillText(text, x, py - 4);
     }
   });
@@ -347,8 +353,8 @@ export default function ExpeditionMap({
   return (
     <div className="absolute inset-0">
       <div ref={containerRef} className="absolute inset-0 h-full w-full" />
-      <canvas ref={gridRef} aria-hidden className="pointer-events-none absolute inset-0 z-[401]" />
-      <canvas ref={fogRef} aria-hidden className="pointer-events-none absolute inset-0 z-[402]" />
+      <canvas ref={fogRef} aria-hidden className="pointer-events-none absolute inset-0 z-[401]" />
+      <canvas ref={gridRef} aria-hidden className="pointer-events-none absolute inset-0 z-[402]" />
       <div className="map-tint" aria-hidden />
     </div>
   );
