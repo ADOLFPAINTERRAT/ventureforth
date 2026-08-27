@@ -431,8 +431,9 @@ function Index() {
                   The ✕ you&apos;re walking to
                 </p>
                 <p className="coord-num mt-1 text-sm text-accent">
-                  {destVisible ? `X ${group(dc.x)} · Z ${group(dc.z)}` : "X ??? · Z ???"}
+                  {`X ${group(dc.x)} · Z ${group(dc.z)}`}
                 </p>
+
               </div>
               <button
                 onClick={end}

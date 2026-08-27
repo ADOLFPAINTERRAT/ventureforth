@@ -86,6 +86,8 @@ export default function ExpeditionMap({
   const destRef = useRef<L.Marker | null>(null);
   const ringRef = useRef<L.Circle | null>(null);
   const lineRef = useRef<L.Polyline | null>(null);
+  const trailRef = useRef<L.Polyline | null>(null);
+
   const programmatic = useRef(false);
   const [ready, setReady] = useState(false);
   const [, setTick] = useState(0);
@@ -231,6 +233,29 @@ export default function ExpeditionMap({
     ctx.globalCompositeOperation = "source-over";
   });
 
+  // ── subtle travelled-path trail ────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const pts = [...trail, player].map((p) => L.latLng(p.lat, p.lng));
+    if (pts.length < 2) {
+      trailRef.current?.remove();
+      trailRef.current = null;
+      return;
+    }
+    if (!trailRef.current) {
+      trailRef.current = L.polyline(pts, {
+        color: "oklch(0.86 0.06 85)",
+        weight: 1.25,
+        opacity: 0.35,
+        interactive: false,
+      }).addTo(map);
+      trailRef.current.bringToFront();
+    } else {
+      trailRef.current.setLatLngs(pts);
+    }
+  }, [trail, player, ready]);
+
   // ── in-world X/Z coordinate grid + labels ──────────────────
   useEffect(() => {
     const map = mapRef.current;
@@ -249,45 +274,75 @@ export default function ExpeditionMap({
     if (!showGrid) return;
 
     const b = map.getBounds();
-    const nw = { lat: b.getNorth(), lng: b.getWest() };
-    const se = { lat: b.getSouth(), lng: b.getEast() };
-    const tl = gameCoords(nw);
-    const br = gameCoords(se);
+    const tl = gameCoords({ lat: b.getNorth(), lng: b.getWest() });
+    const br = gameCoords({ lat: b.getSouth(), lng: b.getEast() });
 
-    // pick a spacing that renders ~90–200px apart
+    // metres per pixel at current zoom
     const mpp = REVEAL_RADIUS / metresToPixels(map, REVEAL_RADIUS);
-    const steps = [50, 100, 250, 500, 1000, 2500, 5000, 10000];
-    const step = steps.find((s) => s / mpp > 90) ?? 10000;
+    const steps = [1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000];
+    // major grid: ~110px apart; minor grid: one step below (never below 18px)
+    const majorIdx = Math.max(
+      0,
+      steps.findIndex((s) => s / mpp > 110),
+    );
+    const major = steps[majorIdx === -1 ? steps.length - 1 : majorIdx] ?? 25000;
+    const minorCandidate = steps[Math.max(0, majorIdx - 1)] ?? major;
+    const minor = minorCandidate / mpp >= 18 ? minorCandidate : 0;
 
-    const cosLat = Math.cos((map.getCenter().lat * Math.PI) / 180);
+    const cLat = map.getCenter().lat;
+    const cLng = map.getCenter().lng;
+    const cosLat = Math.cos((cLat * Math.PI) / 180);
     const lngForX = (x: number) => x / (111320 * cosLat);
     const latForZ = (z: number) => -z / 110540;
+    const pxForX = (x: number) => map.latLngToContainerPoint(L.latLng(cLat, lngForX(x))).x;
+    const pyForZ = (z: number) => map.latLngToContainerPoint(L.latLng(latForZ(z), cLng)).y;
 
-    ctx.font = "600 10px ui-monospace, monospace";
-    ctx.fillStyle = "rgba(235,205,150,0.55)";
-    ctx.strokeStyle = "rgba(235,205,150,0.16)";
-    ctx.lineWidth = 1;
+    const xMin = Math.min(tl.x, br.x);
+    const xMax = Math.max(tl.x, br.x);
+    const zMin = Math.min(tl.z, br.z);
+    const zMax = Math.max(tl.z, br.z);
 
-    const x0 = Math.ceil(Math.min(tl.x, br.x) / step) * step;
-    for (let x = x0; x <= Math.max(tl.x, br.x); x += step) {
-      const px = map.latLngToContainerPoint(L.latLng(map.getCenter().lat, lngForX(x))).x;
+    const drawLines = (step: number, alpha: number) => {
+      ctx.strokeStyle = `rgba(235,205,150,${alpha})`;
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(px + 0.5, 0);
-      ctx.lineTo(px + 0.5, size.y);
+      for (let x = Math.ceil(xMin / step) * step; x <= xMax; x += step) {
+        const px = Math.round(pxForX(x)) + 0.5;
+        ctx.moveTo(px, 0);
+        ctx.lineTo(px, size.y);
+      }
+      for (let z = Math.ceil(zMin / step) * step; z <= zMax; z += step) {
+        const py = Math.round(pyForZ(z)) + 0.5;
+        ctx.moveTo(0, py);
+        ctx.lineTo(size.x, py);
+      }
       ctx.stroke();
-      ctx.fillText(`X ${x}`, px + 5, 14);
+    };
+
+    if (minor) drawLines(minor, 0.07);
+    drawLines(major, 0.2);
+
+    // labels repeated along each major line
+    ctx.font = "600 9px ui-monospace, monospace";
+    ctx.fillStyle = "rgba(235,205,150,0.5)";
+    ctx.textBaseline = "middle";
+    const labelGap = 220;
+
+    for (let x = Math.ceil(xMin / major) * major; x <= xMax; x += major) {
+      const px = pxForX(x);
+      if (px < -40 || px > size.x + 40) continue;
+      const text = `X ${x}`;
+      for (let y = 16; y < size.y; y += labelGap) ctx.fillText(text, px + 4, y);
     }
-
-    const z0 = Math.ceil(Math.min(tl.z, br.z) / step) * step;
-    for (let z = z0; z <= Math.max(tl.z, br.z); z += step) {
-      const py = map.latLngToContainerPoint(L.latLng(latForZ(z), map.getCenter().lng)).y;
-      ctx.beginPath();
-      ctx.moveTo(0, py + 0.5);
-      ctx.lineTo(size.x, py + 0.5);
-      ctx.stroke();
-      ctx.fillText(`Z ${z}`, 6, py - 4);
+    ctx.textBaseline = "alphabetic";
+    for (let z = Math.ceil(zMin / major) * major; z <= zMax; z += major) {
+      const py = pyForZ(z);
+      if (py < -40 || py > size.y + 40) continue;
+      const text = `Z ${z}`;
+      for (let x = 8; x < size.x; x += labelGap) ctx.fillText(text, x, py - 4);
     }
   });
+
 
   return (
     <div className="absolute inset-0">
