@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import type { LatLng } from "@/lib/expedition";
-import { ARRIVAL_RADIUS, REVEAL_RADIUS, destinationFrom, gameCoords } from "@/lib/expedition";
+import { ARRIVAL_RADIUS, REVEAL_RADIUS, destinationFrom } from "@/lib/expedition";
 
 type Props = {
   player: LatLng;
