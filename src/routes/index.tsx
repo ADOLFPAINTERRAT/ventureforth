@@ -333,9 +333,6 @@ function Index() {
           >
             <Crosshair className="h-4 w-4" />
           </button>
-          <button className="ctrl" aria-label="Toggle grid" onClick={() => setShowGrid((v) => !v)}>
-            <Grid3x3 className={showGrid ? "h-4 w-4 text-accent" : "h-4 w-4 opacity-40"} />
-          </button>
           <button
             className="ctrl"
             aria-label="Choose a direction to explore"
