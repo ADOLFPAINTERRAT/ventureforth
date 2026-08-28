@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import type { LatLng } from "@/lib/expedition";
-import { ARRIVAL_RADIUS, REVEAL_RADIUS, destinationFrom, gameCoords } from "@/lib/expedition";
+import { ARRIVAL_RADIUS, REVEAL_RADIUS, destinationFrom } from "@/lib/expedition";
 
 type Props = {
   player: LatLng;
@@ -12,7 +12,6 @@ type Props = {
   /** everywhere the player has physically been this expedition */
   trail: LatLng[];
   arrived: boolean;
-  showGrid: boolean;
   follow: boolean;
   onUserPan: () => void;
   onMapReady: (map: L.Map) => void;
@@ -73,14 +72,12 @@ export default function ExpeditionMap({
   destinationVisible,
   trail,
   arrived,
-  showGrid,
   follow,
   onUserPan,
   onMapReady,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fogRef = useRef<HTMLCanvasElement>(null);
-  const gridRef = useRef<HTMLCanvasElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const playerRef = useRef<L.Marker | null>(null);
   const destRef = useRef<L.Marker | null>(null);

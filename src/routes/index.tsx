@@ -4,7 +4,6 @@ import type L from "leaflet";
 import {
   Compass,
   Crosshair,
-  Grid3x3,
   Minus,
   Plus,
   Flag,
@@ -69,7 +68,6 @@ function Index() {
   const [destination, setDestination] = useState<LatLng | null>(null);
   const [trail, setTrail] = useState<LatLng[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [showGrid, setShowGrid] = useState(true);
   const [follow, setFollow] = useState(true);
   const [level, setLevel] = useState(1);
   const [completed, setCompleted] = useState(0);
@@ -253,7 +251,6 @@ function Index() {
           destinationVisible={destVisible}
           trail={trail}
           arrived={celebrating}
-          showGrid={showGrid}
           follow={follow && !toolOpen}
           onUserPan={() => setFollow(false)}
           onMapReady={(m) => {
