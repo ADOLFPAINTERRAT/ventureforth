@@ -78,6 +78,7 @@ export default function ExpeditionMap({
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fogRef = useRef<HTMLCanvasElement>(null);
+  const gridRef = useRef<HTMLCanvasElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const playerRef = useRef<L.Marker | null>(null);
   const destRef = useRef<L.Marker | null>(null);
@@ -230,6 +231,62 @@ export default function ExpeditionMap({
     ctx.globalCompositeOperation = "source-over";
   });
 
+  // ── square grid (drawn under the fog) ──────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    const cv = gridRef.current;
+    if (!map || !cv || !ready) return;
+    const size = map.getSize();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = size.x * dpr;
+    cv.height = size.y * dpr;
+    cv.style.width = `${size.x}px`;
+    cv.style.height = `${size.y}px`;
+    const ctx = cv.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, size.x, size.y);
+
+    // Grid lines sit on whole X/Z game coordinates (1 unit = 1 metre).
+    // Pick the smallest step that keeps cells at least ~40px on screen,
+    // so zooming in reveals smaller and smaller squares.
+    const mpp = REVEAL_RADIUS / metresToPixels(map, REVEAL_RADIUS);
+    const steps = [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
+    const step = steps.find((s) => s / mpp >= 40) ?? 10000;
+
+    // Use unwrapped coordinate space (gameCoords wraps at 100000, but every
+    // step divides 100000 evenly, so raw lines align with the HUD readout).
+    const b = map.getBounds();
+    const cosLatB = Math.cos((b.getNorth() * Math.PI) / 180);
+    const xMin = b.getWest() * 111320 * cosLatB - step;
+    const xMax = b.getEast() * 111320 * cosLatB + step;
+    const zMin = -b.getNorth() * 110540 - step;
+    const zMax = -b.getSouth() * 110540 + step;
+
+    const cLat = map.getCenter().lat;
+    const cLng = map.getCenter().lng;
+    const cosLat = Math.cos((cLat * Math.PI) / 180);
+    const pxForX = (x: number) =>
+      map.latLngToContainerPoint(L.latLng(cLat, x / (111320 * cosLat))).x;
+    const pyForZ = (z: number) =>
+      map.latLngToContainerPoint(L.latLng(-z / 110540, cLng)).y;
+
+    ctx.strokeStyle = "rgba(235, 205, 150, 0.16)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = Math.ceil(xMin / step) * step; x <= xMax; x += step) {
+      const px = Math.round(pxForX(x)) + 0.5;
+      ctx.moveTo(px, 0);
+      ctx.lineTo(px, size.y);
+    }
+    for (let z = Math.ceil(zMin / step) * step; z <= zMax; z += step) {
+      const py = Math.round(pyForZ(z)) + 0.5;
+      ctx.moveTo(0, py);
+      ctx.lineTo(size.x, py);
+    }
+    ctx.stroke();
+  });
+
   // ── subtle travelled-path trail ────────────────────────────
   useEffect(() => {
     const map = mapRef.current;
@@ -256,6 +313,7 @@ export default function ExpeditionMap({
   return (
     <div className="absolute inset-0">
       <div ref={containerRef} className="absolute inset-0 h-full w-full" />
+      <canvas ref={gridRef} aria-hidden className="pointer-events-none absolute inset-0 z-[400]" />
       <canvas ref={fogRef} aria-hidden className="pointer-events-none absolute inset-0 z-[401]" />
       <div className="map-tint" aria-hidden />
     </div>
