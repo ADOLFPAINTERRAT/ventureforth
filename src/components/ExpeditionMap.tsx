@@ -271,7 +271,7 @@ export default function ExpeditionMap({
     const pyForZ = (z: number) =>
       map.latLngToContainerPoint(L.latLng(-z / 110540, cLng)).y;
 
-    ctx.strokeStyle = "rgba(235, 205, 150, 0.16)";
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.65)";
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let x = Math.ceil(xMin / step) * step; x <= xMax; x += step) {
