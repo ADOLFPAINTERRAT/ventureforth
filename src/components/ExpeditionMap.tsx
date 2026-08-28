@@ -254,13 +254,14 @@ export default function ExpeditionMap({
     const steps = [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
     const step = steps.find((s) => s / mpp >= 40) ?? 10000;
 
+    // Use unwrapped coordinate space (gameCoords wraps at 100000, but every
+    // step divides 100000 evenly, so raw lines align with the HUD readout).
     const b = map.getBounds();
-    const tl = gameCoords({ lat: b.getNorth(), lng: b.getWest() });
-    const br = gameCoords({ lat: b.getSouth(), lng: b.getEast() });
-    const xMin = Math.min(tl.x, br.x) - step;
-    const xMax = Math.max(tl.x, br.x) + step;
-    const zMin = Math.min(tl.z, br.z) - step;
-    const zMax = Math.max(tl.z, br.z) + step;
+    const cosLatB = Math.cos((b.getNorth() * Math.PI) / 180);
+    const xMin = b.getWest() * 111320 * cosLatB - step;
+    const xMax = b.getEast() * 111320 * cosLatB + step;
+    const zMin = -b.getNorth() * 110540 - step;
+    const zMax = -b.getSouth() * 110540 + step;
 
     const cLat = map.getCenter().lat;
     const cLng = map.getCenter().lng;
