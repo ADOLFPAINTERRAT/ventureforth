@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type L from "leaflet";
 import {
@@ -11,6 +11,7 @@ import {
   X as XIcon,
   Loader2,
   Trophy,
+  LogOut,
 } from "lucide-react";
 import {
   ARRIVAL_RADIUS,
@@ -29,6 +30,9 @@ import {
   type LatLng,
 } from "@/lib/expedition";
 import { useHeading } from "@/lib/use-heading";
+import { useSession } from "@/lib/use-session";
+import { loadProgress, saveProgress, type Progress } from "@/lib/progress";
+import { supabase } from "@/integrations/supabase/client";
 
 const ExpeditionMap = lazy(() => import("@/components/ExpeditionMap"));
 const DirectionTool = lazy(() => import("@/components/DirectionTool"));
