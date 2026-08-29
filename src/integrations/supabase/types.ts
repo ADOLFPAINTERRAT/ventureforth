@@ -14,7 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      game_progress: {
+        Row: {
+          completed: number
+          created_at: string
+          destination: Json | null
+          expedition_active: boolean
+          level: number
+          trail: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed?: number
+          created_at?: string
+          destination?: Json | null
+          expedition_active?: boolean
+          level?: number
+          trail?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed?: number
+          created_at?: string
+          destination?: Json | null
+          expedition_active?: boolean
+          level?: number
+          trail?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
