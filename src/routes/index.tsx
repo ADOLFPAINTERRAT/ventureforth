@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type L from "leaflet";
 import {
@@ -11,6 +11,7 @@ import {
   X as XIcon,
   Loader2,
   Trophy,
+  LogOut,
 } from "lucide-react";
 import {
   ARRIVAL_RADIUS,
@@ -29,6 +30,9 @@ import {
   type LatLng,
 } from "@/lib/expedition";
 import { useHeading } from "@/lib/use-heading";
+import { useSession } from "@/lib/use-session";
+import { loadProgress, saveProgress, type Progress } from "@/lib/progress";
+import { supabase } from "@/integrations/supabase/client";
 
 const ExpeditionMap = lazy(() => import("@/components/ExpeditionMap"));
 const DirectionTool = lazy(() => import("@/components/DirectionTool"));
@@ -57,9 +61,11 @@ export const Route = createFileRoute("/")({
 
 type Phase = "start" | "locating" | "active";
 const TRAIL_STEP = 70; // metres between recorded discovery points
-const LEVEL_KEY = "expedition:level";
+const SAVE_DEBOUNCE = 8000; // ms — batch frequent trail growth into one write
 
 function Index() {
+  const navigate = useNavigate();
+  const { user, loading: authLoading } = useSession();
   const [phase, setPhase] = useState<Phase>("start");
   const [player, setPlayer] = useState<LatLng | null>(null);
   const [accuracy, setAccuracy] = useState<number | null>(null);
@@ -75,24 +81,94 @@ function Index() {
   const [toolOpen, setToolOpen] = useState(false);
   const [cone, setCone] = useState<Cone>(DEFAULT_CONE);
   const [scouting, setScouting] = useState(false);
+  const [restoring, setRestoring] = useState(true);
+  const [savedDestination, setSavedDestination] = useState<LatLng | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const watchRef = useRef<number | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevRef = useRef<LatLng | null>(null);
   const lastFixRef = useRef<number>(Date.now());
+  const progressRef = useRef<Progress>({
+    level: 1,
+    completed: 0,
+    trail: [],
+    destination: null,
+    expeditionActive: false,
+  });
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const userIdRef = useRef<string | null>(null);
+  userIdRef.current = user?.id ?? null;
 
+  // ── signed-out visitors go to the account screen ─────────────
   useEffect(() => {
-    const raw = typeof window !== "undefined" ? window.localStorage.getItem(LEVEL_KEY) : null;
-    if (raw) {
-      const v = JSON.parse(raw) as { level?: number; completed?: number };
-      setLevel(v.level ?? 1);
-      setCompleted(v.completed ?? 0);
+    if (!authLoading && !user) navigate({ to: "/auth", replace: true });
+  }, [authLoading, user, navigate]);
+
+  // ── restore this player's saved progress ─────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    if (!user) return;
+    setRestoring(true);
+    loadProgress(user.id).then((p) => {
+      if (cancelled) return;
+      progressRef.current = p;
+      setLevel(p.level);
+      setCompleted(p.completed);
+      setTrail(p.trail);
+      setSavedDestination(p.expeditionActive ? p.destination : null);
+      setRestoring(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  const flushSave = useCallback(() => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
     }
+    const id = userIdRef.current;
+    if (!id) return;
+    void saveProgress(id, progressRef.current);
   }, []);
 
-  const persist = useCallback((lvl: number, done: number) => {
-    window.localStorage.setItem(LEVEL_KEY, JSON.stringify({ level: lvl, completed: done }));
-  }, []);
+  /** Record progress locally, then write it out (debounced unless immediate). */
+  const persist = useCallback(
+    (patch: Partial<Progress>, immediate = false) => {
+      progressRef.current = { ...progressRef.current, ...patch };
+      if (!userIdRef.current) return;
+      if (immediate) {
+        flushSave();
+        return;
+      }
+      if (saveTimer.current) return;
+      saveTimer.current = setTimeout(() => {
+        saveTimer.current = null;
+        flushSave();
+      }, SAVE_DEBOUNCE);
+    },
+    [flushSave],
+  );
+
+  // keep newly revealed ground saved without a write per GPS fix
+  useEffect(() => {
+    if (restoring || !user || trail.length === 0) return;
+    persist({ trail });
+  }, [trail, restoring, user, persist]);
+
+  // last-chance save when the tab is hidden or closed
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flushSave();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", flushSave);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", flushSave);
+    };
+  }, [flushSave]);
 
   const stopTracking = useCallback(() => {
     if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current);
@@ -154,9 +230,13 @@ function Index() {
         prevRef.current = here;
         lastFixRef.current = Date.now();
         setPlayer(here);
-        setTrail([here]);
+        // keep every previously explored point — the map is permanent
+        setTrail((t) => [...t, here]);
         setAccuracy(pos.coords.accuracy ?? null);
-        setDestination(rollDestination(here));
+        // resume the saved expedition instead of rolling a new one
+        const dest = savedDestination ?? rollDestination(here);
+        setDestination(dest);
+        persist({ destination: dest, expeditionActive: true }, true);
         setCelebrating(false);
         setPhase("active");
         watchRef.current = navigator.geolocation.watchPosition(onFix, () => {}, {
