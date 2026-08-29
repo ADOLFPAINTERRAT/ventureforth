@@ -230,9 +230,13 @@ function Index() {
         prevRef.current = here;
         lastFixRef.current = Date.now();
         setPlayer(here);
-        setTrail([here]);
+        // keep every previously explored point — the map is permanent
+        setTrail((t) => [...t, here]);
         setAccuracy(pos.coords.accuracy ?? null);
-        setDestination(rollDestination(here));
+        // resume the saved expedition instead of rolling a new one
+        const dest = savedDestination ?? rollDestination(here);
+        setDestination(dest);
+        persist({ destination: dest, expeditionActive: true }, true);
         setCelebrating(false);
         setPhase("active");
         watchRef.current = navigator.geolocation.watchPosition(onFix, () => {}, {
