@@ -286,7 +286,7 @@ function Index() {
     setLevel((l) => {
       const next = l + 1;
       setCompleted((c) => {
-        persist(next, c + 1);
+        persist({ level: next, completed: c + 1 }, true);
         return c + 1;
       });
       return next;
