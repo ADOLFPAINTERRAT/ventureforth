@@ -63,6 +63,23 @@ export const Route = createFileRoute("/")({
 type Phase = "start" | "locating" | "active";
 const TRAIL_STEP = 70; // metres between recorded discovery points
 const SAVE_DEBOUNCE = 8000; // ms — batch frequent trail growth into one write
+/** Fixes coarser than this never reveal fog or enter the trail. */
+const REVEAL_MAX_ACCURACY = 60;
+/** Faster than this (m/s) = GPS glitch, not a human moving. */
+const MAX_HUMAN_SPEED = 12;
+/** Gap between trail points beyond which fog must not draw a streak. */
+export const MAX_TRAIL_GAP = 500;
+
+/** Drop saved points that sit far from any other explored ground (GPS glitches). */
+function cleanTrail(trail: LatLng[]) {
+  if (trail.length < 3) return trail;
+  return trail.filter((p, i) => {
+    const near = trail.some(
+      (q, j) => j !== i && distanceMeters(p, q) <= MAX_TRAIL_GAP,
+    );
+    return near;
+  });
+}
 
 function Index() {
   const navigate = useNavigate();
@@ -112,10 +129,11 @@ function Index() {
     setRestoring(true);
     loadProgress(user.id).then((p) => {
       if (cancelled) return;
-      progressRef.current = p;
+      const cleaned = cleanTrail(p.trail);
+      progressRef.current = { ...p, trail: cleaned };
       setLevel(p.level);
       setCompleted(p.completed);
-      setTrail(p.trail);
+      setTrail(cleaned);
       setSavedDestination(p.expeditionActive ? p.destination : null);
       setRestoring(false);
     });
