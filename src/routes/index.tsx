@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type L from "leaflet";
 import {
@@ -552,6 +553,16 @@ function StartScreen({
   error: string | null;
   level: number;
 }) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  async function handleSignOut() {
+    await queryClient.cancelQueries();
+    queryClient.clear();
+    await supabase.auth.signOut();
+    navigate({ to: "/auth", replace: true });
+  }
+
   return (
     <main className="relative grid min-h-[100dvh] place-items-center overflow-hidden bg-background px-5 py-10 text-foreground">
       <div
@@ -600,6 +611,12 @@ function StartScreen({
         <p className="mt-5 text-[10px] leading-relaxed tracking-wide text-muted-foreground">
           We need your location to drop you on the map. Nothing leaves your phone.
         </p>
+        <button
+          onClick={handleSignOut}
+          className="mt-6 inline-flex items-center gap-1.5 text-[10px] tracking-[0.25em] text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <LogOut className="h-3 w-3" /> SIGN OUT
+        </button>
       </div>
     </main>
   );
