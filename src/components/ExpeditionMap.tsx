@@ -209,24 +209,31 @@ export default function ExpeditionMap({
     );
 
     ctx.globalCompositeOperation = "destination-out";
-    // continuous trail between fixes
-    ctx.lineWidth = r * 1.6;
+    // continuous trail between fixes — blurred stroke for a soft foggy edge
+    const blur = Math.max(6, r * 0.55);
+    ctx.filter = `blur(${blur}px)`;
+    ctx.lineWidth = r * 1.1;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.strokeStyle = "rgba(0,0,0,1)";
     ctx.beginPath();
     pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
     if (pts.length > 1) ctx.stroke();
-    // soft-edged discs
+    // soft-edged discs with a wide gradual fade band
     for (const p of pts) {
-      const g = ctx.createRadialGradient(p.x, p.y, r * 0.55, p.x, p.y, r);
+      const outer = r * 1.15;
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, outer);
       g.addColorStop(0, "rgba(0,0,0,1)");
+      g.addColorStop(0.55, "rgba(0,0,0,1)");
+      g.addColorStop(0.75, "rgba(0,0,0,0.55)");
+      g.addColorStop(0.92, "rgba(0,0,0,0.18)");
       g.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, outer, 0, Math.PI * 2);
       ctx.fill();
     }
+    ctx.filter = "none";
     ctx.globalCompositeOperation = "source-over";
   });
 
