@@ -129,10 +129,11 @@ function Index() {
     setRestoring(true);
     loadProgress(user.id).then((p) => {
       if (cancelled) return;
-      progressRef.current = p;
+      const cleaned = cleanTrail(p.trail);
+      progressRef.current = { ...p, trail: cleaned };
       setLevel(p.level);
       setCompleted(p.completed);
-      setTrail(p.trail);
+      setTrail(cleaned);
       setSavedDestination(p.expeditionActive ? p.destination : null);
       setRestoring(false);
     });
