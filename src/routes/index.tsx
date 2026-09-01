@@ -14,6 +14,7 @@ import {
   Trophy,
   LogOut,
   Camera,
+  Check,
 } from "lucide-react";
 import {
   ARRIVAL_RADIUS,
@@ -34,7 +35,7 @@ import {
 import { useHeading } from "@/lib/use-heading";
 import { useSession } from "@/lib/use-session";
 import { loadProgress, saveProgress, type Progress } from "@/lib/progress";
-import { addPhoto, deletePhoto, listPhotos, updatePhoto, type PhotoMemory } from "@/lib/photos";
+import { addPhoto, compressToSquare, deletePhoto, listPhotos, updatePhoto, type PhotoMemory } from "@/lib/photos";
 import { supabase } from "@/integrations/supabase/client";
 
 const ExpeditionMap = lazy(() => import("@/components/ExpeditionMap"));
@@ -103,6 +104,7 @@ function Index() {
   const [mapObj, setMapObj] = useState<L.Map | null>(null);
   const [photos, setPhotos] = useState<PhotoMemory[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [pendingPhoto, setPendingPhoto] = useState<{ blob: Blob; url: string } | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [cone, setCone] = useState<Cone>(DEFAULT_CONE);
   const [scouting, setScouting] = useState(false);
