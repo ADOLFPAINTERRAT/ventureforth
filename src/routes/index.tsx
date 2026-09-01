@@ -13,6 +13,7 @@ import {
   Loader2,
   Trophy,
   LogOut,
+  Camera,
 } from "lucide-react";
 import {
   ARRIVAL_RADIUS,
@@ -33,10 +34,12 @@ import {
 import { useHeading } from "@/lib/use-heading";
 import { useSession } from "@/lib/use-session";
 import { loadProgress, saveProgress, type Progress } from "@/lib/progress";
+import { addPhoto, deletePhoto, listPhotos, updatePhoto, type PhotoMemory } from "@/lib/photos";
 import { supabase } from "@/integrations/supabase/client";
 
 const ExpeditionMap = lazy(() => import("@/components/ExpeditionMap"));
 const DirectionTool = lazy(() => import("@/components/DirectionTool"));
+const PhotoMemories = lazy(() => import("@/components/PhotoMemories"));
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -97,6 +100,10 @@ function Index() {
   const [completed, setCompleted] = useState(0);
   const [celebrating, setCelebrating] = useState(false);
   const [toolOpen, setToolOpen] = useState(false);
+  const [mapObj, setMapObj] = useState<L.Map | null>(null);
+  const [photos, setPhotos] = useState<PhotoMemory[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
   const [cone, setCone] = useState<Cone>(DEFAULT_CONE);
   const [scouting, setScouting] = useState(false);
   const [restoring, setRestoring] = useState(true);
@@ -141,6 +148,39 @@ function Index() {
       cancelled = true;
     };
   }, [user]);
+
+  // ── photo memories ───────────────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    listPhotos(user.id).then((ps) => {
+      if (!cancelled) setPhotos(ps);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  const onPickPhoto = useCallback(
+    async (file: File) => {
+      const map = mapRef.current;
+      const id = userIdRef.current;
+      if (!file || !map || !id) return;
+      setUploading(true);
+      try {
+        const c = map.getCenter();
+        const a = map.containerPointToLatLng([0, 0] as unknown as [number, number]);
+        const b = map.containerPointToLatLng([100, 0] as unknown as [number, number]);
+        const metresPer100px = map.distance(a, b);
+        const sizeM = Math.max(2, (metresPer100px / 100) * 110);
+        const created = await addPhoto(id, file, { lat: c.lat, lng: c.lng }, sizeM);
+        if (created) setPhotos((ps) => [...ps, created]);
+      } finally {
+        setUploading(false);
+      }
+    },
+    [],
+  );
 
   const flushSave = useCallback(() => {
     if (saveTimer.current) {
@@ -354,6 +394,7 @@ function Index() {
           onUserPan={() => setFollow(false)}
           onMapReady={(m) => {
             mapRef.current = m;
+            setMapObj(m);
           }}
         />
       </Suspense>
@@ -413,6 +454,38 @@ function Index() {
         </Suspense>
       )}
 
+      <Suspense fallback={null}>
+        <PhotoMemories
+          map={mapObj}
+          photos={photos}
+          onMove={(id, at) => {
+            setPhotos((ps) => ps.map((p) => (p.id === id ? { ...p, ...at } : p)));
+            void updatePhoto(id, at);
+          }}
+          onResize={(id, sizeM) => {
+            setPhotos((ps) => ps.map((p) => (p.id === id ? { ...p, sizeM } : p)));
+            void updatePhoto(id, { sizeM });
+          }}
+          onDelete={(photo) => {
+            setPhotos((ps) => ps.filter((p) => p.id !== photo.id));
+            void deletePhoto(photo);
+          }}
+        />
+      </Suspense>
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (f) void onPickPhoto(f);
+        }}
+      />
+
       {/* controls, thumb side */}
       {!toolOpen && (
         <div className="absolute bottom-56 right-3 z-[500] flex flex-col gap-2">
@@ -459,6 +532,18 @@ function Index() {
             }}
           >
             <Flag className={destVisible ? "h-4 w-4" : "h-4 w-4 opacity-30"} />
+          </button>
+          <button
+            className="ctrl"
+            aria-label="Pin a photo memory here"
+            disabled={uploading}
+            onClick={() => fileRef.current?.click()}
+          >
+            {uploading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Camera className="h-4 w-4" />
+            )}
           </button>
         </div>
       )}
