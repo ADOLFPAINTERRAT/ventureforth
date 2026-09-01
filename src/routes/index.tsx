@@ -14,6 +14,7 @@ import {
   Trophy,
   LogOut,
   Camera,
+  Check,
 } from "lucide-react";
 import {
   ARRIVAL_RADIUS,
@@ -34,7 +35,7 @@ import {
 import { useHeading } from "@/lib/use-heading";
 import { useSession } from "@/lib/use-session";
 import { loadProgress, saveProgress, type Progress } from "@/lib/progress";
-import { addPhoto, deletePhoto, listPhotos, updatePhoto, type PhotoMemory } from "@/lib/photos";
+import { addPhoto, compressToSquare, deletePhoto, listPhotos, updatePhoto, type PhotoMemory } from "@/lib/photos";
 import { supabase } from "@/integrations/supabase/client";
 
 const ExpeditionMap = lazy(() => import("@/components/ExpeditionMap"));
@@ -103,6 +104,7 @@ function Index() {
   const [mapObj, setMapObj] = useState<L.Map | null>(null);
   const [photos, setPhotos] = useState<PhotoMemory[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [pendingPhoto, setPendingPhoto] = useState<{ blob: Blob; url: string } | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [cone, setCone] = useState<Cone>(DEFAULT_CONE);
   const [scouting, setScouting] = useState(false);
@@ -161,26 +163,50 @@ function Index() {
     };
   }, [user]);
 
-  const onPickPhoto = useCallback(
-    async (file: File) => {
-      const map = mapRef.current;
-      const id = userIdRef.current;
-      if (!file || !map || !id) return;
-      setUploading(true);
-      try {
-        const c = map.getCenter();
-        const a = map.containerPointToLatLng([0, 0] as unknown as [number, number]);
-        const b = map.containerPointToLatLng([100, 0] as unknown as [number, number]);
-        const metresPer100px = map.distance(a, b);
-        const sizeM = Math.max(2, (metresPer100px / 100) * 110);
-        const created = await addPhoto(id, file, { lat: c.lat, lng: c.lng }, sizeM);
-        if (created) setPhotos((ps) => [...ps, created]);
-      } finally {
-        setUploading(false);
+  const onPickPhoto = useCallback(async (file: File) => {
+    if (!file || !mapRef.current || !userIdRef.current) return;
+    try {
+      const blob = await compressToSquare(file);
+      setPendingPhoto((old) => {
+        if (old) URL.revokeObjectURL(old.url);
+        return { blob, url: URL.createObjectURL(blob) };
+      });
+    } catch {
+      toast.error("Could not read that photo");
+    }
+  }, []);
+
+  const cancelPendingPhoto = useCallback(() => {
+    setPendingPhoto((old) => {
+      if (old) URL.revokeObjectURL(old.url);
+      return null;
+    });
+  }, []);
+
+  const confirmPendingPhoto = useCallback(async () => {
+    const pending = pendingPhoto;
+    const map = mapRef.current;
+    const id = userIdRef.current;
+    if (!pending || !map || !id) return;
+    setUploading(true);
+    try {
+      const c = map.getCenter();
+      const a = map.containerPointToLatLng([0, 0] as unknown as [number, number]);
+      const b = map.containerPointToLatLng([100, 0] as unknown as [number, number]);
+      const metresPer100px = map.distance(a, b);
+      const sizeM = Math.max(2, (metresPer100px / 100) * 110);
+      const file = new File([pending.blob], "memory.jpg", { type: "image/jpeg" });
+      const created = await addPhoto(id, file, { lat: c.lat, lng: c.lng }, sizeM);
+      if (created) {
+        setPhotos((ps) => [...ps, created]);
+        cancelPendingPhoto();
+      } else {
+        toast.error("Could not save that photo");
       }
-    },
-    [],
-  );
+    } finally {
+      setUploading(false);
+    }
+  }, [pendingPhoto, cancelPendingPhoto]);
 
   const flushSave = useCallback(() => {
     if (saveTimer.current) {
