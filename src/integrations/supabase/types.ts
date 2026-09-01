@@ -47,6 +47,39 @@ export type Database = {
         }
         Relationships: []
       }
+      photo_memories: {
+        Row: {
+          created_at: string
+          id: string
+          lat: number
+          lng: number
+          size_m: number
+          storage_path: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          lat: number
+          lng: number
+          size_m?: number
+          storage_path: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          lat?: number
+          lng?: number
+          size_m?: number
+          storage_path?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
