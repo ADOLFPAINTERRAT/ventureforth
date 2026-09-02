@@ -73,15 +73,15 @@ const MAX_HUMAN_SPEED = 12;
 /** Gap between trail points beyond which fog must not draw a streak. */
 export const MAX_TRAIL_GAP = 500;
 
-/** Drop saved points that sit far from any other explored ground (GPS glitches). */
+/** Drop lone GPS glitches, but never discard genuinely explored ground. */
 function cleanTrail(trail: LatLng[]) {
-  if (trail.length < 3) return trail;
-  return trail.filter((p, i) => {
-    const near = trail.some(
-      (q, j) => j !== i && distanceMeters(p, q) <= MAX_TRAIL_GAP,
-    );
+  if (trail.length < 8) return trail;
+  const kept = trail.filter((p, i) => {
+    const near = trail.some((q, j) => j !== i && distanceMeters(p, q) <= MAX_TRAIL_GAP);
     return near;
   });
+  // safety net: if the filter would erase most of the map, keep everything
+  return kept.length >= trail.length * 0.6 ? kept : trail;
 }
 
 function Index() {
@@ -213,6 +213,8 @@ function Index() {
   // keep newly revealed ground saved without a write per GPS fix
   useEffect(() => {
     if (restoring || !user || trail.length === 0) return;
+    // never let a shorter in-memory trail overwrite saved exploration
+    if (trail.length < progressRef.current.trail.length) return;
     persist({ trail });
   }, [trail, restoring, user, persist]);
 
@@ -328,7 +330,7 @@ function Index() {
     prevRef.current = null;
     setDestination(null);
     setPlayer(null);
-    setTrail([]);
+    // the explored map is permanent — never clear the trail here
     setAccuracy(null);
     setCelebrating(false);
     setToolOpen(false);
