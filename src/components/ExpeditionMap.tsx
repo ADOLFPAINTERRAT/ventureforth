@@ -83,7 +83,6 @@ export default function ExpeditionMap({
   const destRef = useRef<L.Marker | null>(null);
   const ringRef = useRef<L.Circle | null>(null);
   const lineRef = useRef<L.Polyline | null>(null);
-  const trailRef = useRef<L.Polyline | null>(null);
 
   const programmatic = useRef(false);
   const [ready, setReady] = useState(false);
@@ -236,29 +235,6 @@ export default function ExpeditionMap({
     ctx.filter = "none";
     ctx.globalCompositeOperation = "source-over";
   });
-
-  // ── subtle travelled-path trail ────────────────────────────
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const pts = [...trail, player].map((p) => L.latLng(p.lat, p.lng));
-    if (pts.length < 2) {
-      trailRef.current?.remove();
-      trailRef.current = null;
-      return;
-    }
-    if (!trailRef.current) {
-      trailRef.current = L.polyline(pts, {
-        color: "oklch(0.86 0.06 85)",
-        weight: 1.25,
-        opacity: 0.35,
-        interactive: false,
-      }).addTo(map);
-      trailRef.current.bringToFront();
-    } else {
-      trailRef.current.setLatLngs(pts);
-    }
-  }, [trail, player, ready]);
 
   return (
     <div className="absolute inset-0">
