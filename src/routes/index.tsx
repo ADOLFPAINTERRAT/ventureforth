@@ -213,6 +213,8 @@ function Index() {
   // keep newly revealed ground saved without a write per GPS fix
   useEffect(() => {
     if (restoring || !user || trail.length === 0) return;
+    // never let a shorter in-memory trail overwrite saved exploration
+    if (trail.length < progressRef.current.trail.length) return;
     persist({ trail });
   }, [trail, restoring, user, persist]);
 
@@ -328,7 +330,7 @@ function Index() {
     prevRef.current = null;
     setDestination(null);
     setPlayer(null);
-    setTrail([]);
+    // the explored map is permanent — never clear the trail here
     setAccuracy(null);
     setCelebrating(false);
     setToolOpen(false);
