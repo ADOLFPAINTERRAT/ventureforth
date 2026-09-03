@@ -150,7 +150,6 @@ export default function PhotoMemories({ map, photos, onMove, onResize, onDelete 
           const px = l ? l.px : Math.max(10, photo.sizeM * scale);
           const selected = selectedId === photo.id;
           const pin = Math.min(10, Math.max(3, px * 0.16));
-          const handle = Math.min(20, Math.max(12, px * 0.22));
           return (
             <div
               key={photo.id}
