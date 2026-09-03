@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import L from "leaflet";
 import { Trash2, X as XIcon } from "lucide-react";
+import type { PhotoMemory } from "@/lib/photos";
 
 type Props = {
   map: L.Map | null;
