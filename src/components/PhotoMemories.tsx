@@ -195,19 +195,22 @@ export default function PhotoMemories({ map, photos, onMove, onResize, onDelete 
                   boxShadow: "0 1px 2px rgba(0,0,0,.6)",
                 }}
               />
-              {selected && px >= 44 && (
+              {selected && (
                 <div
-                  className="absolute rounded-full border border-white/40 bg-black/80"
+                  className="absolute flex items-center justify-center rounded-full border border-white/50 bg-black/80"
                   style={{
-                    width: handle,
-                    height: handle,
-                    right: -handle / 2,
-                    bottom: -handle / 2,
+                    width: 22,
+                    height: 22,
+                    right: -11,
+                    bottom: -11,
                     cursor: "nwse-resize",
                     touchAction: "none",
+                    boxShadow: "0 1px 3px rgba(0,0,0,.6)",
                   }}
                   onPointerDown={(e) => start(e, photo, "resize", base.x, base.y, px)}
-                />
+                >
+                  <div className="rounded-full bg-white" style={{ width: 8, height: 8 }} />
+                </div>
               )}
             </div>
           );
