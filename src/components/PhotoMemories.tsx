@@ -155,26 +155,32 @@ export default function PhotoMemories({ map, photos, onMove, onResize, onDelete 
                   draggable={false}
                   className="h-full w-full select-none object-cover"
                 />
-                {/* pin */}
+                {/* pin — scales with the photo, capped so it never swallows small ones */}
                 <div
                   aria-hidden
                   className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/3 rounded-full"
                   style={{
-                    width: Math.max(5, px * 0.16),
-                    height: Math.max(5, px * 0.16),
+                    width: Math.min(10, Math.max(3, px * 0.09)),
+                    height: Math.min(10, Math.max(3, px * 0.09)),
                     background: "oklch(0.62 0.21 27)",
-                    boxShadow: "0 0 0 1px oklch(0.96 0.02 90 / .8), 0 2px 4px rgba(0,0,0,.7)",
+                    boxShadow: "0 0 0 1px oklch(0.96 0.02 90 / .8), 0 1px 3px rgba(0,0,0,.7)",
                   }}
                 />
               </div>
-              {/* resize handle */}
-              <div
-                role="button"
-                aria-label="Resize photo"
-                onPointerDown={(e) => start(e, photo, "resize", x, y, px)}
-                className="absolute -bottom-2 -right-2 h-5 w-5 cursor-nwse-resize rounded-full border border-[oklch(0.62_0.21_27)] bg-[oklch(0.18_0.02_250)]"
-                style={{ touchAction: "none" }}
-              />
+              {/* resize handle — only shown when the photo is big enough to grab */}
+              {px >= 44 && (
+                <div
+                  role="button"
+                  aria-label="Resize photo"
+                  onPointerDown={(e) => start(e, photo, "resize", x, y, px)}
+                  className="absolute -bottom-2 -right-2 cursor-nwse-resize rounded-full border border-[oklch(0.62_0.21_27)] bg-[oklch(0.18_0.02_250)]"
+                  style={{
+                    touchAction: "none",
+                    width: Math.min(20, Math.max(12, px * 0.22)),
+                    height: Math.min(20, Math.max(12, px * 0.22)),
+                  }}
+                />
+              )}
             </div>
           );
         })}
