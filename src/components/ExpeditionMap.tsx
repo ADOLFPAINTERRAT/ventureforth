@@ -196,38 +196,46 @@ export default function ExpeditionMap({
     const cv = fogRef.current;
     if (!map || !cv) return;
     const size = map.getSize();
+    // draw well beyond the viewport so panning never exposes an un-fogged edge
+    const PAD = 500;
+    const w = size.x + PAD * 2;
+    const h = size.y + PAD * 2;
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-    if (cv.width !== Math.round(size.x * dpr) || cv.height !== Math.round(size.y * dpr)) {
-      cv.width = Math.round(size.x * dpr);
-      cv.height = Math.round(size.y * dpr);
-      cv.style.width = `${size.x}px`;
-      cv.style.height = `${size.y}px`;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+      cv.width = Math.round(w * dpr);
+      cv.height = Math.round(h * dpr);
+      cv.style.width = `${w}px`;
+      cv.style.height = `${h}px`;
     }
+    cv.style.left = `${-PAD}px`;
+    cv.style.top = `${-PAD}px`;
     const ctx = cv.getContext("2d");
     if (!ctx) return;
 
     // anchor for the cheap pan/zoom transform
     drawn.current = { tl: map.containerPointToLatLng(L.point(0, 0)), zoom: map.getZoom() };
-    cv.style.transformOrigin = "0 0";
+    cv.style.transformOrigin = `${PAD}px ${PAD}px`;
     cv.style.transform = "translate3d(0,0,0)";
 
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, size.x, size.y);
+    // container coords map straight onto the padded canvas
+    ctx.setTransform(dpr, 0, 0, dpr, PAD * dpr, PAD * dpr);
+    ctx.clearRect(-PAD, -PAD, w, h);
     ctx.fillStyle = "rgba(8, 12, 20, 0.965)";
-    ctx.fillRect(0, 0, size.x, size.y);
+    ctx.fillRect(-PAD, -PAD, w, h);
 
     const r = metresToPixels(map, REVEAL_RADIUS);
-    const margin = r * 2;
+    const margin = r * 2 + PAD;
     const all = (trail.length ? trail : [player]).map((p) =>
       map.latLngToContainerPoint(L.latLng(p.lat, p.lng)),
     );
-    // keep only segments that can touch the viewport
+    // keep only segments that can touch the padded viewport
     const visible = (p: L.Point) =>
       p.x > -margin && p.y > -margin && p.x < size.x + margin && p.y < size.y + margin;
     const pts = all.filter(
       (p, i) => visible(p) || (all[i - 1] && visible(all[i - 1]!)) || (all[i + 1] && visible(all[i + 1]!)),
     );
     if (!pts.length) return;
+
 
     ctx.globalCompositeOperation = "destination-out";
     // continuous trail between fixes — blurred stroke for a soft foggy edge
