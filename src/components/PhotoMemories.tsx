@@ -171,7 +171,8 @@ export default function PhotoMemories({ map, photos, onMove, onResize, onDelete 
   return (
     <>
       <div
-        className="pointer-events-none absolute inset-0 z-[500]"
+        ref={layerRef}
+        className="pointer-events-none absolute inset-0 z-[500] will-change-transform"
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
