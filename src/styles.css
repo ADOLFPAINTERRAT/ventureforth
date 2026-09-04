@@ -194,7 +194,6 @@ body {
       color-mix(in oklab, var(--card) 96%, white 4%),
       color-mix(in oklab, var(--card) 92%, black 8%)
     );
-  backdrop-filter: blur(10px);
   border: 1px solid var(--border);
   box-shadow: var(--glow-primary);
 }
@@ -209,7 +208,6 @@ body {
   background: color-mix(in oklab, var(--card) 90%, black 10%);
   color: var(--foreground);
   border: 1px solid var(--border);
-  backdrop-filter: blur(10px);
   box-shadow: var(--glow-primary);
   transition: all 0.15s ease;
   &:hover {
@@ -244,9 +242,15 @@ body {
   font-family: var(--font-game);
   outline: none;
 }
-.leaflet-tile-pane {
+/* Filter each tile (cached per tile) instead of the whole pane,
+   which would force a full-layer repaint on every pan frame. */
+.leaflet-tile {
   filter: grayscale(0.55) sepia(0.35) saturate(0.85) contrast(1.05) brightness(0.62);
 }
+.leaflet-tile-pane {
+  will-change: transform;
+}
+
 .leaflet-control-attribution {
   background: oklch(0.17 0.02 250 / 0.7) !important;
   color: oklch(0.7 0.02 80) !important;

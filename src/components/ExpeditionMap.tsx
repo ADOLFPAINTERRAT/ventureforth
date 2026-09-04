@@ -97,11 +97,18 @@ export default function ExpeditionMap({
       zoom: 15,
       zoomControl: false,
       attributionControl: true,
+      preferCanvas: true,
+      fadeAnimation: false,
+      markerZoomAnimation: false,
+      inertiaDeceleration: 2600,
     });
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
+      keepBuffer: 3,
+      updateWhenZooming: false,
       attribution: "&copy; OpenStreetMap",
     }).addTo(map);
+
 
     playerRef.current = L.marker([player.lat, player.lng], {
       icon: playerIcon(),
