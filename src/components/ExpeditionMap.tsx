@@ -294,7 +294,7 @@ export default function ExpeditionMap({
   return (
     <div className="absolute inset-0">
       <div ref={containerRef} className="absolute inset-0 h-full w-full" />
-      <canvas ref={fogRef} aria-hidden className="pointer-events-none absolute inset-0 z-[401] will-change-transform" />
+      <canvas ref={fogRef} aria-hidden className="pointer-events-none absolute z-[401] will-change-transform" />
       <div className="map-tint" aria-hidden />
     </div>
   );
