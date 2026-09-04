@@ -279,7 +279,16 @@ export default function ExpeditionMap({
       const scale = map.getZoomScale(map.getZoom(), d.zoom);
       const p = map.latLngToContainerPoint(d.tl);
       cv.style.transform = `translate3d(${p.x}px, ${p.y}px, 0) scale(${scale})`;
+      // if the padded canvas no longer covers the viewport, repaint now
+      const PAD = 500;
+      const size = map.getSize();
+      const left = p.x - PAD * scale;
+      const top = p.y - PAD * scale;
+      const right = left + (size.x + PAD * 2) * scale;
+      const bottom = top + (size.y + PAD * 2) * scale;
+      if (left > 0 || top > 0 || right < size.x || bottom < size.y) setTick((t) => t + 1);
     };
+
     const onMove = () => {
       if (!raf) raf = requestAnimationFrame(sync);
     };
