@@ -37,15 +37,50 @@ export default function PhotoMemories({ map, photos, onMove, onResize, onDelete 
   const [live, setLive] = useState<{ id: string; x: number; y: number; px: number } | null>(null);
   const drag = useRef<Drag | null>(null);
 
-  // re-render as the map pans/zooms so photos stay anchored to their location
+  // Reposition only when the view settles; while panning/zooming the whole
+  // layer is CSS-transformed instead of re-rendering every frame.
+  const layerRef = useRef<HTMLDivElement>(null);
+  const anchor = useRef<{ tl: L.LatLng; zoom: number } | null>(null);
+
   useEffect(() => {
     if (!map) return;
     const onChange = () => bump();
-    map.on("move zoom moveend zoomend resize", onChange);
+    map.on("moveend zoomend resize", onChange);
     return () => {
-      map.off("move zoom moveend zoomend resize", onChange);
+      map.off("moveend zoomend resize", onChange);
     };
   }, [map]);
+
+  useEffect(() => {
+    if (!map) return;
+    let raf = 0;
+    const sync = () => {
+      raf = 0;
+      const el = layerRef.current;
+      const a = anchor.current;
+      if (!el || !a) return;
+      const scale = map.getZoomScale(map.getZoom(), a.zoom);
+      const p = map.latLngToContainerPoint(a.tl);
+      el.style.transformOrigin = "0 0";
+      el.style.transform = `translate3d(${p.x}px, ${p.y}px, 0) scale(${scale})`;
+    };
+    const onMove = () => {
+      if (!raf) raf = requestAnimationFrame(sync);
+    };
+    map.on("move zoom", onMove);
+    return () => {
+      map.off("move zoom", onMove);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [map]);
+
+  // after every settled re-render, reset the transform and re-anchor
+  useEffect(() => {
+    if (!map) return;
+    anchor.current = { tl: map.containerPointToLatLng(L.point(0, 0)), zoom: map.getZoom() };
+    if (layerRef.current) layerRef.current.style.transform = "translate3d(0,0,0)";
+  });
+
 
   // deselect when tapping empty map space
   useEffect(() => {
@@ -136,7 +171,8 @@ export default function PhotoMemories({ map, photos, onMove, onResize, onDelete 
   return (
     <>
       <div
-        className="pointer-events-none absolute inset-0 z-[500]"
+        ref={layerRef}
+        className="pointer-events-none absolute inset-0 z-[500] will-change-transform"
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}

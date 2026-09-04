@@ -85,8 +85,10 @@ export default function ExpeditionMap({
   const lineRef = useRef<L.Polyline | null>(null);
 
   const programmatic = useRef(false);
+  const drawn = useRef<{ tl: L.LatLng; zoom: number } | null>(null);
   const [ready, setReady] = useState(false);
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
+
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -107,7 +109,9 @@ export default function ExpeditionMap({
     }).addTo(map);
 
     const redraw = () => setTick((t) => t + 1);
-    map.on("move zoom viewreset resize moveend zoomend", redraw);
+    // Cheap: while panning/zooming we only translate the fog canvas (see below).
+    map.on("moveend zoomend viewreset resize", redraw);
+
 
     map.on("dragstart", () => {
       if (!programmatic.current) onUserPan();
@@ -185,27 +189,45 @@ export default function ExpeditionMap({
   }, [heading, player, arrived, ready]);
 
   // ── fog of war ─────────────────────────────────────────────
+  // Redrawn only when the view settles or the data changes; while the user
+  // drags/zooms the canvas is just CSS-transformed, which stays at 60fps.
   useEffect(() => {
     const map = mapRef.current;
     const cv = fogRef.current;
     if (!map || !cv) return;
     const size = map.getSize();
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    cv.width = size.x * dpr;
-    cv.height = size.y * dpr;
-    cv.style.width = `${size.x}px`;
-    cv.style.height = `${size.y}px`;
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    if (cv.width !== Math.round(size.x * dpr) || cv.height !== Math.round(size.y * dpr)) {
+      cv.width = Math.round(size.x * dpr);
+      cv.height = Math.round(size.y * dpr);
+      cv.style.width = `${size.x}px`;
+      cv.style.height = `${size.y}px`;
+    }
     const ctx = cv.getContext("2d");
     if (!ctx) return;
+
+    // anchor for the cheap pan/zoom transform
+    drawn.current = { tl: map.containerPointToLatLng(L.point(0, 0)), zoom: map.getZoom() };
+    cv.style.transformOrigin = "0 0";
+    cv.style.transform = "translate3d(0,0,0)";
+
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size.x, size.y);
     ctx.fillStyle = "rgba(8, 12, 20, 0.965)";
     ctx.fillRect(0, 0, size.x, size.y);
 
     const r = metresToPixels(map, REVEAL_RADIUS);
-    const pts = (trail.length ? trail : [player]).map((p) =>
+    const margin = r * 2;
+    const all = (trail.length ? trail : [player]).map((p) =>
       map.latLngToContainerPoint(L.latLng(p.lat, p.lng)),
     );
+    // keep only segments that can touch the viewport
+    const visible = (p: L.Point) =>
+      p.x > -margin && p.y > -margin && p.x < size.x + margin && p.y < size.y + margin;
+    const pts = all.filter(
+      (p, i) => visible(p) || (all[i - 1] && visible(all[i - 1]!)) || (all[i + 1] && visible(all[i + 1]!)),
+    );
+    if (!pts.length) return;
 
     ctx.globalCompositeOperation = "destination-out";
     // continuous trail between fixes — blurred stroke for a soft foggy edge
@@ -234,12 +256,37 @@ export default function ExpeditionMap({
     }
     ctx.filter = "none";
     ctx.globalCompositeOperation = "source-over";
-  });
+  }, [player, trail, tick, ready]);
+
+  // cheap fog follow while panning / zooming
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    let raf = 0;
+    const sync = () => {
+      raf = 0;
+      const cv = fogRef.current;
+      const d = drawn.current;
+      if (!cv || !d) return;
+      const scale = map.getZoomScale(map.getZoom(), d.zoom);
+      const p = map.latLngToContainerPoint(d.tl);
+      cv.style.transform = `translate3d(${p.x}px, ${p.y}px, 0) scale(${scale})`;
+    };
+    const onMove = () => {
+      if (!raf) raf = requestAnimationFrame(sync);
+    };
+    map.on("move zoom", onMove);
+    return () => {
+      map.off("move zoom", onMove);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [ready]);
+
 
   return (
     <div className="absolute inset-0">
       <div ref={containerRef} className="absolute inset-0 h-full w-full" />
-      <canvas ref={fogRef} aria-hidden className="pointer-events-none absolute inset-0 z-[401]" />
+      <canvas ref={fogRef} aria-hidden className="pointer-events-none absolute inset-0 z-[401] will-change-transform" />
       <div className="map-tint" aria-hidden />
     </div>
   );
