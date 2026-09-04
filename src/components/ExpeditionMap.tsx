@@ -97,18 +97,11 @@ export default function ExpeditionMap({
       zoom: 15,
       zoomControl: false,
       attributionControl: true,
-      preferCanvas: true,
-      fadeAnimation: false,
-      markerZoomAnimation: false,
-      inertiaDeceleration: 2600,
     });
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
-      keepBuffer: 3,
-      updateWhenZooming: false,
       attribution: "&copy; OpenStreetMap",
     }).addTo(map);
-
 
     playerRef.current = L.marker([player.lat, player.lng], {
       icon: playerIcon(),
@@ -203,46 +196,38 @@ export default function ExpeditionMap({
     const cv = fogRef.current;
     if (!map || !cv) return;
     const size = map.getSize();
-    // draw well beyond the viewport so panning never exposes an un-fogged edge
-    const PAD = 500;
-    const w = size.x + PAD * 2;
-    const h = size.y + PAD * 2;
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
-      cv.width = Math.round(w * dpr);
-      cv.height = Math.round(h * dpr);
-      cv.style.width = `${w}px`;
-      cv.style.height = `${h}px`;
+    if (cv.width !== Math.round(size.x * dpr) || cv.height !== Math.round(size.y * dpr)) {
+      cv.width = Math.round(size.x * dpr);
+      cv.height = Math.round(size.y * dpr);
+      cv.style.width = `${size.x}px`;
+      cv.style.height = `${size.y}px`;
     }
-    cv.style.left = `${-PAD}px`;
-    cv.style.top = `${-PAD}px`;
     const ctx = cv.getContext("2d");
     if (!ctx) return;
 
     // anchor for the cheap pan/zoom transform
     drawn.current = { tl: map.containerPointToLatLng(L.point(0, 0)), zoom: map.getZoom() };
-    cv.style.transformOrigin = `${PAD}px ${PAD}px`;
+    cv.style.transformOrigin = "0 0";
     cv.style.transform = "translate3d(0,0,0)";
 
-    // container coords map straight onto the padded canvas
-    ctx.setTransform(dpr, 0, 0, dpr, PAD * dpr, PAD * dpr);
-    ctx.clearRect(-PAD, -PAD, w, h);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, size.x, size.y);
     ctx.fillStyle = "rgba(8, 12, 20, 0.965)";
-    ctx.fillRect(-PAD, -PAD, w, h);
+    ctx.fillRect(0, 0, size.x, size.y);
 
     const r = metresToPixels(map, REVEAL_RADIUS);
-    const margin = r * 2 + PAD;
+    const margin = r * 2;
     const all = (trail.length ? trail : [player]).map((p) =>
       map.latLngToContainerPoint(L.latLng(p.lat, p.lng)),
     );
-    // keep only segments that can touch the padded viewport
+    // keep only segments that can touch the viewport
     const visible = (p: L.Point) =>
       p.x > -margin && p.y > -margin && p.x < size.x + margin && p.y < size.y + margin;
     const pts = all.filter(
       (p, i) => visible(p) || (all[i - 1] && visible(all[i - 1]!)) || (all[i + 1] && visible(all[i + 1]!)),
     );
     if (!pts.length) return;
-
 
     ctx.globalCompositeOperation = "destination-out";
     // continuous trail between fixes — blurred stroke for a soft foggy edge
@@ -286,16 +271,7 @@ export default function ExpeditionMap({
       const scale = map.getZoomScale(map.getZoom(), d.zoom);
       const p = map.latLngToContainerPoint(d.tl);
       cv.style.transform = `translate3d(${p.x}px, ${p.y}px, 0) scale(${scale})`;
-      // if the padded canvas no longer covers the viewport, repaint now
-      const PAD = 500;
-      const size = map.getSize();
-      const left = p.x - PAD * scale;
-      const top = p.y - PAD * scale;
-      const right = left + (size.x + PAD * 2) * scale;
-      const bottom = top + (size.y + PAD * 2) * scale;
-      if (left > 0 || top > 0 || right < size.x || bottom < size.y) setTick((t) => t + 1);
     };
-
     const onMove = () => {
       if (!raf) raf = requestAnimationFrame(sync);
     };
@@ -310,7 +286,7 @@ export default function ExpeditionMap({
   return (
     <div className="absolute inset-0">
       <div ref={containerRef} className="absolute inset-0 h-full w-full" />
-      <canvas ref={fogRef} aria-hidden className="pointer-events-none absolute z-[401] will-change-transform" />
+      <canvas ref={fogRef} aria-hidden className="pointer-events-none absolute inset-0 z-[401] will-change-transform" />
       <div className="map-tint" aria-hidden />
     </div>
   );
