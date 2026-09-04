@@ -194,7 +194,6 @@ body {
       color-mix(in oklab, var(--card) 96%, white 4%),
       color-mix(in oklab, var(--card) 92%, black 8%)
     );
-  backdrop-filter: blur(10px);
   border: 1px solid var(--border);
   box-shadow: var(--glow-primary);
 }
@@ -209,7 +208,6 @@ body {
   background: color-mix(in oklab, var(--card) 90%, black 10%);
   color: var(--foreground);
   border: 1px solid var(--border);
-  backdrop-filter: blur(10px);
   box-shadow: var(--glow-primary);
   transition: all 0.15s ease;
   &:hover {
