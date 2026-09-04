@@ -85,8 +85,10 @@ export default function ExpeditionMap({
   const lineRef = useRef<L.Polyline | null>(null);
 
   const programmatic = useRef(false);
+  const drawn = useRef<{ tl: L.LatLng; zoom: number } | null>(null);
   const [ready, setReady] = useState(false);
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
+
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
