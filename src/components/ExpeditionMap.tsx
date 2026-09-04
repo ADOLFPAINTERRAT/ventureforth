@@ -107,7 +107,9 @@ export default function ExpeditionMap({
     }).addTo(map);
 
     const redraw = () => setTick((t) => t + 1);
-    map.on("move zoom viewreset resize moveend zoomend", redraw);
+    // Cheap: while panning/zooming we only translate the fog canvas (see below).
+    map.on("moveend zoomend viewreset resize", redraw);
+
 
     map.on("dragstart", () => {
       if (!programmatic.current) onUserPan();
