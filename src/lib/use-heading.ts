@@ -12,6 +12,8 @@ export function useHeading() {
   const [source, setSource] = useState<"compass" | "gps" | null>(null);
   const smoothed = useRef<number | null>(null);
   const hasCompass = useRef(false);
+  const frame = useRef(0);
+  const pending = useRef<{ heading: number; source: "compass" | "gps" } | null>(null);
 
   const push = useCallback((deg: number, src: "compass" | "gps") => {
     if (src === "gps" && hasCompass.current) return;
@@ -24,8 +26,21 @@ export function useHeading() {
       next = ((prev + delta * 0.35) % 360 + 360) % 360;
     }
     smoothed.current = next;
-    setHeading(next);
-    setSource(src);
+    pending.current = { heading: next, source: src };
+    if (frame.current) return;
+    frame.current = requestAnimationFrame(() => {
+      frame.current = 0;
+      const value = pending.current;
+      if (!value) return;
+      setHeading((current) => {
+        if (current !== null) {
+          const delta = Math.abs(((value.heading - current + 540) % 360) - 180);
+          if (delta < 1) return current;
+        }
+        return value.heading;
+      });
+      setSource((current) => (current === value.source ? current : value.source));
+    });
   }, []);
 
   const start = useCallback(() => {
@@ -74,7 +89,10 @@ export function useHeading() {
     detachRef.current = start();
   }, [start]);
 
-  useEffect(() => () => detachRef.current?.(), []);
+  useEffect(() => () => {
+    detachRef.current?.();
+    if (frame.current) cancelAnimationFrame(frame.current);
+  }, []);
 
   const pushGps = useCallback((deg: number) => push(deg, "gps"), [push]);
 

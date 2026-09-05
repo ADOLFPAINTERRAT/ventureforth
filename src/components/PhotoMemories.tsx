@@ -31,7 +31,7 @@ type Drag = {
 };
 
 export default function PhotoMemories({ map, photos, onMove, onResize, onDelete }: Props) {
-  const [, bump] = useReducer((n: number) => n + 1, 0);
+  const [viewVersion, bump] = useReducer((n: number) => n + 1, 0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [live, setLive] = useState<{ id: string; x: number; y: number; px: number } | null>(null);
@@ -74,12 +74,12 @@ export default function PhotoMemories({ map, photos, onMove, onResize, onDelete 
     };
   }, [map]);
 
-  // after every settled re-render, reset the transform and re-anchor
+  // Re-anchor only after the map view settles, not after photo selection/drag renders.
   useEffect(() => {
     if (!map) return;
     anchor.current = { tl: map.containerPointToLatLng(L.point(0, 0)), zoom: map.getZoom() };
     if (layerRef.current) layerRef.current.style.transform = "translate3d(0,0,0)";
-  });
+  }, [map, viewVersion]);
 
 
   // deselect when tapping empty map space
@@ -167,6 +167,8 @@ export default function PhotoMemories({ map, photos, onMove, onResize, onDelete 
   if (!map) return null;
   const scale = pxPerMetre(map);
   const open = photos.find((p) => p.id === openId) ?? null;
+  const size = map.getSize();
+  const viewMargin = 160;
 
   return (
     <>
@@ -184,6 +186,9 @@ export default function PhotoMemories({ map, photos, onMove, onResize, onDelete 
           const x = l ? l.x : base.x;
           const y = l ? l.y : base.y;
           const px = l ? l.px : Math.max(10, photo.sizeM * scale);
+          if (!l && (x < -viewMargin || y < -viewMargin || x > size.x + viewMargin || y > size.y + viewMargin)) {
+            return null;
+          }
           const selected = selectedId === photo.id;
           const pin = Math.min(10, Math.max(3, px * 0.16));
           return (
