@@ -64,7 +64,7 @@ export const Route = createFileRoute("/")({
 });
 
 type Phase = "start" | "locating" | "active";
-const TRAIL_STEP = 70; // metres between recorded discovery points
+const TRAIL_STEP = 45; // metres between recorded discovery points
 const SAVE_DEBOUNCE = 8000; // ms — batch frequent trail growth into one write
 /** Fixes coarser than this never reveal fog or enter the trail. */
 const REVEAL_MAX_ACCURACY = 60;
@@ -110,8 +110,8 @@ function Index() {
   const [savedDestination, setSavedDestination] = useState<LatLng | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const watchRef = useRef<number | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevRef = useRef<LatLng | null>(null);
+  const lastRevealRef = useRef<{ point: LatLng; at: number } | null>(null);
   const lastFixRef = useRef<number>(Date.now());
   const progressRef = useRef<Progress>({
     level: 1,
@@ -143,6 +143,11 @@ function Index() {
       setTrail(cleaned);
       setSavedDestination(p.expeditionActive ? p.destination : null);
       setRestoring(false);
+      if (cleaned.length !== p.trail.length) {
+        const repaired = { ...p, trail: cleaned };
+        progressRef.current = repaired;
+        void saveProgress(user.id, repaired);
+      }
     });
     return () => {
       cancelled = true;
@@ -234,8 +239,6 @@ function Index() {
   const stopTracking = useCallback(() => {
     if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current);
     watchRef.current = null;
-    if (pollRef.current !== null) clearInterval(pollRef.current);
-    pollRef.current = null;
   }, []);
 
   useEffect(() => () => stopTracking(), [stopTracking]);
@@ -268,8 +271,14 @@ function Index() {
 
     const onFix = (p: GeolocationPosition) => {
       const next = { lat: p.coords.latitude, lng: p.coords.longitude };
+      const now = p.timestamp || Date.now();
       lastFixRef.current = Date.now();
-      setAccuracy(p.coords.accuracy ?? null);
+      const nextAccuracy = p.coords.accuracy ?? null;
+      setAccuracy((current) =>
+        current === null || nextAccuracy === null || Math.abs(current - nextAccuracy) >= 1
+          ? nextAccuracy
+          : current,
+      );
       const moved = prevRef.current ? distanceMeters(prevRef.current, next) : 0;
       if (
         p.coords.heading !== null &&
@@ -281,19 +290,25 @@ function Index() {
         pushGps(bearingDegrees(prevRef.current, next));
       }
       prevRef.current = next;
-      setPlayer(next);
+      setPlayer((current) => (!current || distanceMeters(current, next) >= 1 ? next : current));
+
+      if (nextAccuracy === null || nextAccuracy > REVEAL_MAX_ACCURACY) return;
+      const lastReveal = lastRevealRef.current;
+      if (lastReveal) {
+        const revealGap = distanceMeters(lastReveal.point, next);
+        const elapsed = Math.max(0.25, (now - lastReveal.at) / 1000);
+        const reportedSpeed = p.coords.speed;
+        const speed = reportedSpeed !== null && reportedSpeed >= 0 ? reportedSpeed : revealGap / elapsed;
+        if (revealGap > MAX_TRAIL_GAP || speed > MAX_HUMAN_SPEED) return;
+      }
+      lastRevealRef.current = { point: next, at: now };
       revealAt(next);
     };
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        prevRef.current = here;
-        lastFixRef.current = Date.now();
-        setPlayer(here);
-        // keep every previously explored point — the map is permanent
-        setTrail((t) => [...t, here]);
-        setAccuracy(pos.coords.accuracy ?? null);
+        onFix(pos);
         // resume the saved expedition instead of rolling a new one
         const dest = savedDestination ?? rollDestination(here);
         setDestination(dest);
@@ -302,16 +317,9 @@ function Index() {
         setPhase("active");
         watchRef.current = navigator.geolocation.watchPosition(onFix, () => {}, {
           enableHighAccuracy: true,
-          maximumAge: 0,
+          maximumAge: 1000,
           timeout: 30000,
         });
-        pollRef.current = setInterval(() => {
-          navigator.geolocation.getCurrentPosition(onFix, () => {}, {
-            enableHighAccuracy: true,
-            maximumAge: 0,
-            timeout: 15000,
-          });
-        }, 1000);
       },
       (err) => {
         setPhase("start");
@@ -323,11 +331,12 @@ function Index() {
       },
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
     );
-  }, [pushGps, revealAt, startCompass]);
+  }, [persist, pushGps, revealAt, savedDestination, startCompass]);
 
   const end = useCallback(() => {
     stopTracking();
     prevRef.current = null;
+    lastRevealRef.current = null;
     setDestination(null);
     setPlayer(null);
     // the explored map is permanent — never clear the trail here

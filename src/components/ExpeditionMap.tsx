@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import type { LatLng } from "@/lib/expedition";
-import { ARRIVAL_RADIUS, REVEAL_RADIUS, destinationFrom } from "@/lib/expedition";
+import { ARRIVAL_RADIUS, REVEAL_RADIUS, destinationFrom, distanceMeters } from "@/lib/expedition";
 
 type Props = {
   player: LatLng;
@@ -16,6 +16,8 @@ type Props = {
   onUserPan: () => void;
   onMapReady: (map: L.Map) => void;
 };
+
+const MAX_TRAIL_GAP = 500;
 
 function playerIcon() {
   return L.divIcon({
@@ -86,6 +88,7 @@ export default function ExpeditionMap({
 
   const programmatic = useRef(false);
   const drawn = useRef<{ tl: L.LatLng; zoom: number } | null>(null);
+  const stampRef = useRef<{ radius: number; canvas: HTMLCanvasElement } | null>(null);
   const [ready, setReady] = useState(false);
   const [tick, setTick] = useState(0);
 
@@ -166,10 +169,10 @@ export default function ExpeditionMap({
       lineRef.current = null;
     }
 
-    if (follow) {
+    if (follow && !map.getBounds().pad(-0.3).contains(ll)) {
       programmatic.current = true;
-      map.panTo(ll, { animate: true });
-      setTimeout(() => (programmatic.current = false), 400);
+      map.panTo(ll, { animate: false });
+      programmatic.current = false;
     }
   }, [player, destination, destinationVisible, follow, ready]);
 
@@ -218,45 +221,60 @@ export default function ExpeditionMap({
 
     const r = metresToPixels(map, REVEAL_RADIUS);
     const margin = r * 2;
-    const all = (trail.length ? trail : [player]).map((p) =>
-      map.latLngToContainerPoint(L.latLng(p.lat, p.lng)),
-    );
+    const projected = trail.map((geo) => ({ geo, point: map.latLngToContainerPoint(L.latLng(geo.lat, geo.lng)) }));
     // keep only segments that can touch the viewport
     const visible = (p: L.Point) =>
       p.x > -margin && p.y > -margin && p.x < size.x + margin && p.y < size.y + margin;
-    const pts = all.filter(
-      (p, i) => visible(p) || (all[i - 1] && visible(all[i - 1]!)) || (all[i + 1] && visible(all[i + 1]!)),
-    );
+    const nearView = projected.filter(({ point }, i) => {
+      const before = projected[i - 1]?.point;
+      const after = projected[i + 1]?.point;
+      return visible(point) || (before ? visible(before) : false) || (after ? visible(after) : false);
+    });
+    const pts = nearView.filter(({ point }, i) => {
+      const previous = nearView[i - 1]?.point;
+      return !previous || point.distanceTo(previous) >= Math.max(4, r * 0.18) || i === nearView.length - 1;
+    });
     if (!pts.length) return;
 
     ctx.globalCompositeOperation = "destination-out";
-    // continuous trail between fixes — blurred stroke for a soft foggy edge
-    const blur = Math.max(6, r * 0.55);
-    ctx.filter = `blur(${blur}px)`;
-    ctx.lineWidth = r * 1.1;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = "rgba(0,0,0,1)";
-    ctx.beginPath();
-    pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
-    if (pts.length > 1) ctx.stroke();
-    // soft-edged discs with a wide gradual fade band
-    for (const p of pts) {
-      const outer = r * 1.15;
-      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, outer);
+    const stampRadius = Math.max(2, Math.round(r * 1.15));
+    if (!stampRef.current || stampRef.current.radius !== stampRadius) {
+      const stamp = document.createElement("canvas");
+      stamp.width = stampRadius * 2;
+      stamp.height = stampRadius * 2;
+      const stampCtx = stamp.getContext("2d");
+      if (!stampCtx) return;
+      const g = stampCtx.createRadialGradient(stampRadius, stampRadius, 0, stampRadius, stampRadius, stampRadius);
       g.addColorStop(0, "rgba(0,0,0,1)");
       g.addColorStop(0.55, "rgba(0,0,0,1)");
       g.addColorStop(0.75, "rgba(0,0,0,0.55)");
       g.addColorStop(0.92, "rgba(0,0,0,0.18)");
       g.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, outer, 0, Math.PI * 2);
-      ctx.fill();
+      stampCtx.fillStyle = g;
+      stampCtx.fillRect(0, 0, stamp.width, stamp.height);
+      stampRef.current = { radius: stampRadius, canvas: stamp };
     }
-    ctx.filter = "none";
+    const stamp = stampRef.current.canvas;
+    const drawStamp = (p: L.Point) => ctx.drawImage(stamp, p.x - stampRadius, p.y - stampRadius);
+    for (let i = 0; i < pts.length; i++) {
+      const current = pts[i];
+      if (!current) continue;
+      const previous = pts[i - 1];
+      if (previous && distanceMeters(previous.geo, current.geo) <= MAX_TRAIL_GAP) {
+        const screenGap = current.point.distanceTo(previous.point);
+        const steps = Math.min(24, Math.floor(screenGap / Math.max(4, r * 0.45)));
+        for (let step = 1; step < steps; step++) {
+          const ratio = step / steps;
+          drawStamp(L.point(
+            previous.point.x + (current.point.x - previous.point.x) * ratio,
+            previous.point.y + (current.point.y - previous.point.y) * ratio,
+          ));
+        }
+      }
+      drawStamp(current.point);
+    }
     ctx.globalCompositeOperation = "source-over";
-  }, [player, trail, tick, ready]);
+  }, [trail, tick, ready]);
 
   // cheap fog follow while panning / zooming
   useEffect(() => {
