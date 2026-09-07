@@ -404,6 +404,7 @@ function Index() {
           arrived={celebrating}
           follow={follow && !toolOpen}
           onUserPan={() => setFollow(false)}
+          onRotate={setMapRotation}
           onMapReady={(m) => {
             mapRef.current = m;
             setMapObj(m);
@@ -469,6 +470,7 @@ function Index() {
       <Suspense fallback={null}>
         <PhotoMemories
           map={mapObj}
+          rotation={mapRotation}
           photos={photos}
           onMove={(id, at) => {
             setPhotos((ps) => ps.map((p) => (p.id === id ? { ...p, ...at } : p)));
