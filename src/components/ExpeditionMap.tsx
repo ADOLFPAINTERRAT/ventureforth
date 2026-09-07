@@ -81,6 +81,7 @@ export default function ExpeditionMap({
   onMapReady,
   onRotate,
 }: Props) {
+  const shellRef = useRef<HTMLDivElement>(null);
   const rotateRef = useRef<HTMLDivElement>(null);
   const bearing = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
