@@ -9,6 +9,8 @@ type Props = {
   onMove: (id: string, at: { lat: number; lng: number }) => void;
   onResize: (id: string, sizeM: number) => void;
   onDelete: (photo: PhotoMemory) => void;
+  /** current map twist angle in degrees, so photos stay pinned to the ground */
+  rotation?: number;
 };
 
 /** screen pixels per metre at the map's current zoom */
@@ -30,7 +32,7 @@ type Drag = {
   moved: boolean;
 };
 
-export default function PhotoMemories({ map, photos, onMove, onResize, onDelete }: Props) {
+export default function PhotoMemories({ map, photos, onMove, onResize, onDelete, rotation = 0 }: Props) {
   const [viewVersion, bump] = useReducer((n: number) => n + 1, 0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -123,8 +125,12 @@ export default function PhotoMemories({ map, photos, onMove, onResize, onDelete 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     const d = drag.current;
     if (!d) return;
-    const dx = e.clientX - d.startX;
-    const dy = e.clientY - d.startY;
+    // undo the map twist so a photo follows the finger while the map is rotated
+    const rad = (-rotation * Math.PI) / 180;
+    const rawX = e.clientX - d.startX;
+    const rawY = e.clientY - d.startY;
+    const dx = rawX * Math.cos(rad) - rawY * Math.sin(rad);
+    const dy = rawX * Math.sin(rad) + rawY * Math.cos(rad);
     if (Math.abs(dx) > 3 || Math.abs(dy) > 3) d.moved = true;
     if (d.mode === "move") {
       setLive({ id: d.id, x: d.origX + dx, y: d.origY + dy, px: d.origPx });
@@ -132,7 +138,7 @@ export default function PhotoMemories({ map, photos, onMove, onResize, onDelete 
       const next = Math.max(18, d.origPx + (dx + dy) / 2);
       setLive({ id: d.id, x: d.origX, y: d.origY, px: next });
     }
-  }, []);
+  }, [rotation]);
 
   const onPointerUp = useCallback(
     (e: React.PointerEvent) => {
@@ -172,6 +178,10 @@ export default function PhotoMemories({ map, photos, onMove, onResize, onDelete 
 
   return (
     <>
+      <div
+        className="pointer-events-none absolute inset-0 z-[500]"
+        style={{ transform: `rotate(${rotation}deg)`, transformOrigin: "50% 50%" }}
+      >
       <div
         ref={layerRef}
         className="pointer-events-none absolute inset-0 z-[500] will-change-transform"
@@ -255,6 +265,7 @@ export default function PhotoMemories({ map, photos, onMove, onResize, onDelete 
             </div>
           );
         })}
+      </div>
       </div>
 
       {open && (

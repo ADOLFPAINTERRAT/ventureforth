@@ -101,6 +101,7 @@ function Index() {
   const [celebrating, setCelebrating] = useState(false);
   const [toolOpen, setToolOpen] = useState(false);
   const [mapObj, setMapObj] = useState<L.Map | null>(null);
+  const [mapRotation, setMapRotation] = useState(0);
   const [photos, setPhotos] = useState<PhotoMemory[]>([]);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -403,6 +404,7 @@ function Index() {
           arrived={celebrating}
           follow={follow && !toolOpen}
           onUserPan={() => setFollow(false)}
+          onRotate={setMapRotation}
           onMapReady={(m) => {
             mapRef.current = m;
             setMapObj(m);
@@ -468,6 +470,7 @@ function Index() {
       <Suspense fallback={null}>
         <PhotoMemories
           map={mapObj}
+          rotation={mapRotation}
           photos={photos}
           onMove={(id, at) => {
             setPhotos((ps) => ps.map((p) => (p.id === id ? { ...p, ...at } : p)));
