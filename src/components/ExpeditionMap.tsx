@@ -15,6 +15,8 @@ type Props = {
   follow: boolean;
   onUserPan: () => void;
   onMapReady: (map: L.Map) => void;
+  /** two-finger twist angle in degrees, reported back so overlays can match */
+  onRotate?: (deg: number) => void;
 };
 
 const MAX_TRAIL_GAP = 500;
