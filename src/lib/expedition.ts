@@ -83,7 +83,7 @@ export function walkMinutes(meters: number) {
 }
 
 /** How much map (in metres) the player reveals around themselves as they walk. */
-export const REVEAL_RADIUS = 140;
+export const REVEAL_RADIUS = 70;
 
 /** Has this point been uncovered by the player's exploration trail? */
 export function isDiscovered(p: LatLng, trail: LatLng[], radius = REVEAL_RADIUS) {
