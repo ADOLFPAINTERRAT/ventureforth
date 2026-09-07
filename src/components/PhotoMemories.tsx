@@ -266,6 +266,7 @@ export default function PhotoMemories({ map, photos, onMove, onResize, onDelete,
           );
         })}
       </div>
+      </div>
 
       {open && (
         <div
