@@ -9,6 +9,8 @@ type Props = {
   onMove: (id: string, at: { lat: number; lng: number }) => void;
   onResize: (id: string, sizeM: number) => void;
   onDelete: (photo: PhotoMemory) => void;
+  /** current map twist angle in degrees, so photos stay pinned to the ground */
+  rotation?: number;
 };
 
 /** screen pixels per metre at the map's current zoom */
@@ -30,7 +32,7 @@ type Drag = {
   moved: boolean;
 };
 
-export default function PhotoMemories({ map, photos, onMove, onResize, onDelete }: Props) {
+export default function PhotoMemories({ map, photos, onMove, onResize, onDelete, rotation = 0 }: Props) {
   const [viewVersion, bump] = useReducer((n: number) => n + 1, 0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
