@@ -306,6 +306,56 @@ export default function ExpeditionMap({
     };
   }, [ready]);
 
+  // two-finger twist to rotate the map, Google-Maps style
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    let startAngle: number | null = null;
+    let startBearing = 0;
+    let raf = 0;
+    let pending = 0;
+
+    const angleOf = (t: TouchList) => {
+      const a = t[0]!;
+      const b = t[1]!;
+      return (Math.atan2(b.clientY - a.clientY, b.clientX - a.clientX) * 180) / Math.PI;
+    };
+    const apply = () => {
+      raf = 0;
+      bearing.current = pending;
+      if (rotateRef.current) rotateRef.current.style.transform = `rotate(${pending}deg)`;
+      onRotate?.(pending);
+    };
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length !== 2) return;
+      startAngle = angleOf(e.touches);
+      startBearing = bearing.current;
+    };
+    const onMove = (e: TouchEvent) => {
+      if (e.touches.length !== 2 || startAngle === null) return;
+      let next = startBearing + (angleOf(e.touches) - startAngle);
+      next = ((next % 360) + 360) % 360;
+      // snap back to north when the user gets close
+      if (next < 6 || next > 354) next = 0;
+      pending = next;
+      if (!raf) raf = requestAnimationFrame(apply);
+    };
+    const onEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) startAngle = null;
+    };
+
+    shell.addEventListener("touchstart", onStart, { passive: true });
+    shell.addEventListener("touchmove", onMove, { passive: true });
+    shell.addEventListener("touchend", onEnd, { passive: true });
+    shell.addEventListener("touchcancel", onEnd, { passive: true });
+    return () => {
+      shell.removeEventListener("touchstart", onStart);
+      shell.removeEventListener("touchmove", onMove);
+      shell.removeEventListener("touchend", onEnd);
+      shell.removeEventListener("touchcancel", onEnd);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [ready, onRotate]);
 
   return (
     <div ref={shellRef} className="absolute inset-0 overflow-hidden bg-background">
