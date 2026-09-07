@@ -54,11 +54,14 @@ export function rollDestination(origin: LatLng): LatLng {
 
 /** Fictional Minecraft-style exploration grid derived from real coordinates. */
 export function gameCoords(p: LatLng) {
-  // 1 grid unit = 1 metre, measured from a single world origin.
-  // No wrapping: two nearby places always get nearby numbers, so the
-  // distance between your X/Z and the target's X/Z is always meaningful.
-  const x = Math.round(p.lng * 111320 * Math.cos(toRad(p.lat)));
-  const z = Math.round(-p.lat * 110540);
+  // 1 grid unit = 1 metre, measured from a fixed local anchor (the
+  // 0.5° grid cell you're in). No wrapping and no huge numbers: two
+  // nearby places always get small, nearby numbers, so the difference
+  // between your X/Z and the target's X/Z is a real distance in metres.
+  const anchorLat = Math.floor(p.lat * 2) / 2;
+  const anchorLng = Math.floor(p.lng * 2) / 2;
+  const x = Math.round((p.lng - anchorLng) * 111320 * Math.cos(toRad(p.lat)));
+  const z = Math.round(-(p.lat - anchorLat) * 110540);
   return { x, z };
 }
 
