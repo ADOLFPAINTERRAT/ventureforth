@@ -79,7 +79,10 @@ export default function ExpeditionMap({
   follow,
   onUserPan,
   onMapReady,
+  onRotate,
 }: Props) {
+  const rotateRef = useRef<HTMLDivElement>(null);
+  const bearing = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const fogRef = useRef<HTMLCanvasElement>(null);
   const mapRef = useRef<L.Map | null>(null);
