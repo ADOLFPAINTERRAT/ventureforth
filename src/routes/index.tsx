@@ -101,6 +101,7 @@ function Index() {
   const [celebrating, setCelebrating] = useState(false);
   const [toolOpen, setToolOpen] = useState(false);
   const [mapObj, setMapObj] = useState<L.Map | null>(null);
+  const [mapRotation, setMapRotation] = useState(0);
   const [photos, setPhotos] = useState<PhotoMemory[]>([]);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
