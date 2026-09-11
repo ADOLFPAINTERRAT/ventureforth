@@ -35,6 +35,7 @@ import { useHeading } from "@/lib/use-heading";
 import { useSession } from "@/lib/use-session";
 import { loadProgress, saveProgress, type Progress } from "@/lib/progress";
 import { addPhoto, deletePhoto, listPhotos, updatePhoto, type PhotoMemory } from "@/lib/photos";
+import { useSmoothedPosition } from "@/hooks/use-smoothed-position";
 import { supabase } from "@/integrations/supabase/client";
 
 const ExpeditionMap = lazy(() => import("@/components/ExpeditionMap"));
@@ -89,6 +90,8 @@ function Index() {
   const { user, loading: authLoading } = useSession();
   const [phase, setPhase] = useState<Phase>("start");
   const [player, setPlayer] = useState<LatLng | null>(null);
+  // Raw GPS stays authoritative for gameplay; this is only for rendering.
+  const displayPlayer = useSmoothedPosition(player, phase === "active");
   const [accuracy, setAccuracy] = useState<number | null>(null);
   const [fixAge, setFixAge] = useState(0);
   const { heading, begin: startCompass, pushGps } = useHeading();
@@ -387,16 +390,17 @@ function Index() {
     return <StartScreen onBegin={begin} loading={phase === "locating"} error={error} level={level} />;
   }
 
+  const mapPlayer = displayPlayer ?? player;
   const bearing = bearingDegrees(player, destination);
   const destVisible = isDiscovered(destination, trail);
-  const pc = gameCoords(player);
+  const pc = gameCoords(mapPlayer);
   const dc = gameCoords(destination);
 
   return (
     <main className="relative h-[100dvh] w-full overflow-hidden bg-background text-foreground">
       <Suspense fallback={<div className="absolute inset-0 bg-background" />}>
         <ExpeditionMap
-          player={player}
+          player={mapPlayer}
           heading={heading}
           destination={destination}
           destinationVisible={destVisible}
@@ -607,7 +611,7 @@ function Index() {
               <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
                 Where you are
               </p>
-              <p className="text-[11px] tracking-[0.2em] text-accent">SECTOR {sectorCode(player)}</p>
+              <p className="text-[11px] tracking-[0.2em] text-accent">SECTOR {sectorCode(mapPlayer)}</p>
             </div>
 
             <div className="mt-3 grid grid-cols-2 gap-3">
