@@ -294,7 +294,7 @@ function Index() {
         pushGps(bearingDegrees(prevRef.current, next));
       }
       prevRef.current = next;
-      setPlayer((current) => (!current || distanceMeters(current, next) >= 1 ? next : current));
+      setPlayer(next);
 
       if (nextAccuracy === null || nextAccuracy > REVEAL_MAX_ACCURACY) return;
       const lastReveal = lastRevealRef.current;
